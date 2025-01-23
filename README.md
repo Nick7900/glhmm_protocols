@@ -1,5 +1,5 @@
 # Statistical testing framework for brain dynamics
-Welcome to the protocols for the statistical testing methods described in the paper *A Comprehensive Framework for Statistical Testing of Brain Dynamics*. This repository provides Jupyter notebooks and resources to implement the statistical framework introduced in the paper. Built on the statistical tools included in the [GLHMM toolbox](https://github.com/vidaurre/glhmm), these protocols are designed for analysing the relationships between brain activity, behaviour, physiological signals, and other variables across different experimental designs. 
+Welcome to the protocols for the statistical testing methods described in the paper *A comprehensive framework for statistical testing of brain dynamics*. This repository provides Jupyter notebooks and resources to implement the statistical framework introduced in the paper. Built on the statistical tools included in the [GLHMM toolbox](https://github.com/vidaurre/glhmm), these protocols are designed for analysing the relationships between brain activity, behaviour, physiological signals, and other variables across different experimental designs. 
 
 ## What’s Included
 This repository provides Jupyter notebooks for four statistical tests:
