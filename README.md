@@ -21,14 +21,16 @@ All datasets required to run the notebooks are hosted on Zenodo (link coming soo
 Install all the necessary Python libraries by running:
    ```bash
    pip install git+https://github.com/vidaurre/glhmm
-
+   ```
 3. **Install the required dependencies**: 
 Install all the necessary Python libraries by running:
    ```bash
    pip install -r requirements.txt
-
+   ```
 4. **Download the data**: 
-The example datasets for the notebooks will be available on Zenodo (DOI link coming soon). Download the data and place it in the appropriate folders as described in each of the notebooks.
+The example datasets for the notebooks will be available on Zenodo (DOI link coming soon).
+
+5. **Change the path in the `ZENODO_PATH.txt` file**: To make it easy to load in the correct files in each notebook, change the path according to where the Zenodo data is saved on your computer.
 
 ## Features of this protocol
 * Robust Statistical Inference: Utilises permutation-based testing, which avoids strict assumptions about data distributions.
