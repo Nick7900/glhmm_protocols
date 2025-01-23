@@ -1,4 +1,4 @@
-# Statistical Testing Framework for Brain Dynamics
+# Statistical testing framework for brain dynamics
 
 Welcome to the **Statistical Testing Framework for Brain Dynamics**, a resource built on the statistical testing tools included in the [GLHMM toolbox](https://github.com/vidaurre/glhmm). This framework is designed for analysing the relationships between brain activity, behaviour, physiological signals, and other variables across different experimental designs. 
 
