@@ -1,5 +1,5 @@
 # Statistical testing framework for brain dynamics
-Welcome to the protocols for the statistical testing methods described in the paper (A comprehensive framework for statistical testing of brain dynamics)[https://arxiv.org/abs/2505.02541]. This repository provides Jupyter notebooks and resources to implement the statistical framework introduced in the paper. Built on the statistical tools included in the [GLHMM toolbox](https://github.com/vidaurre/glhmm), these protocols are designed for analysing the relationships between brain activity, behaviour, physiological signals, and other variables across different experimental designs. 
+Welcome to the protocols for the statistical testing methods described in the paper [A comprehensive framework for statistical testing of brain dynamics](https://arxiv.org/abs/2505.02541). This repository provides Jupyter notebooks and resources to implement the statistical framework introduced in the paper. Built on the statistical tools included in the [GLHMM toolbox](https://github.com/vidaurre/glhmm), these protocols are designed for analysing the relationships between brain activity, behaviour, physiological signals, and other variables across different experimental designs. 
 
 ## What’s Included
 This repository provides Jupyter notebooks for four statistical tests:
@@ -33,10 +33,10 @@ The example datasets for the notebooks will be available on Zenodo (DOI link com
 5. **Change the path in the `ZENODO_PATH.txt` file**: To make it easy to load in the correct files in each notebook, change the path according to where the Zenodo data is saved on your computer.
 
 ## Features of this protocol
-* Robust Statistical Inference: Utilises permutation-based testing, which avoids strict assumptions about data distributions.
+* Statistical Inference: Utilises permutation-based and Monte Carlo resampling testing, which avoids strict assumptions about data distributions.
 * Visualisation Tools: Easily interpret results with intuitive plots built into the framework.
 * Step-by-Step Workflows: Detailed Jupyter notebooks guide you through each test, making it accessible regardless of your programming experience.
 
 ## How to Cite
 If you use this framework in your research, please cite the accompanying protocol paper:
-A Comprehensive Framework for Statistical Testing of Brain Dynamics
+[A comprehensive framework for statistical testing of brain dynamics](https://arxiv.org/abs/2505.02541)
