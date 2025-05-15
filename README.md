@@ -9,7 +9,7 @@ This repository provides Jupyter notebooks for four statistical tests:
 4. **Across-state-visits**: Explores how brain states relate to concurrent signals like pupil size or physiological measurements.
 
 ## Data Availability
-All datasets required to run the notebooks are hosted on Zenodo (link coming soon). The data is ready to use and compatible with the workflows in this repository.
+All datasets required to run the notebooks are hosted on Zenodo (DOI [10.5281/zenodo.15213970](https://zenodo.org/records/14756003)). The data is ready to use and compatible with the workflows in this repository.
 
 ## How to Use
 1. Clone this repository:
@@ -28,9 +28,7 @@ Install all the necessary Python libraries by running:
    pip install -r requirements.txt
    ```
 4. **Download the data**: 
-The example datasets for the notebooks will be available on Zenodo (DOI link coming soon).
-
-5. **Change the path in the `ZENODO_PATH.txt` file**: To make it easy to load in the correct files in each notebook, change the path according to where the Zenodo data is saved on your computer.
+The example datasets for the notebooks will be available on Zenodo (DOI [10.5281/zenodo.15213970](https://zenodo.org/records/14756003)).
 
 ## Features of this protocol
 * Statistical Inference: Utilises permutation-based and Monte Carlo resampling testing, which avoids strict assumptions about data distributions.
