@@ -18,10 +18,9 @@ The notebooks will automatically download the required datasets on first run. Al
 
 ## How to Use
 
-1. Clone this repository:
+1. Clone this repository to a folder of your choice:
    ```bash
    git clone https://github.com/Nick7900/glhmm_protocols.git
-   cd glhmm_protocols
    ```
 
 2. Install the GLHMM package:
@@ -29,28 +28,34 @@ The notebooks will automatically download the required datasets on first run. Al
    pip install git+https://github.com/vidaurre/glhmm
    ```
 
-3. Launch a notebook of your choice and follow the step-by-step instructions.
+3. Navigate to the Protocols folder and launch the notebook corresponding to the statistical test you want to run:
 
 ## GUI Version
 
 In addition to the Python package and Jupyter notebooks, the GLHMM toolbox now includes a graphical user interface (GUI) for users who prefer a code-free experience. To use the GUI:
 
-1. Create a Python 3.10:
+1. Clone the protocols (if not already done):
    ```bash
-   conda create --name streamlit_test python=3.10
+   git clone https://github.com/Nick7900/glhmm_protocols.git
    ```
-2. Activate conda environment:
+   
+2. Create a Python 3.10 environment:
    ```bash
-   conda activate streamlit_test
+   conda create --name glhmm_GUI python=3.10
    ```
-3. Install GLHMM and Streamlit:
+3. Activate conda environment:
+   ```bash
+   conda activate glhmm_GUI
+   ```
+4. Install GLHMM and Streamlit:
    ```bash
    pip install git+https://github.com/vidaurre/glhmm
    pip install streamlit
    ```
 
-4. Navigate to the GUI directory and run:
+5. Navigate to the GUI directory and run the app:
    ```bash
+   cd glhmm_protocols/GUI
    streamlit run 1_🏠_load_data.py
    ```
 
