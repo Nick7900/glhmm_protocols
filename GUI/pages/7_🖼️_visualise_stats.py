@@ -17,7 +17,6 @@ st.subheader("Select P-Value Source")
 pval_uncorrected = st.session_state.get("test_result", {}).get("pval")
 corrected_p = st.session_state.get("corrected_p")
 
-
 # Prevent running if no data loaded
 if pval_uncorrected is None and corrected_p is None:
     st.error("❌ No p-values was found in memory.")
@@ -27,6 +26,8 @@ if pval_uncorrected is None and corrected_p is None:
 if corrected_p is not None:
     if isinstance(corrected_p,tuple):
         pval_corrected = corrected_p[0]
+    else:
+        pval_corrected =corrected_p.copy()
 else:
     st.warning("No corrected p-values found in session state.")
     pval_corrected = None
