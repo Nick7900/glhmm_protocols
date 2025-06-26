@@ -4,7 +4,9 @@ from glhmm import graphics
 from utils import _save_figure_ui,ends_with_number,conditional_numeric_sort
 from importlib import reload
 reload(graphics)
-
+if "data_raw" in st.session_state:
+    st.session_state.pop("data_raw")  # removes it from memory only on this page
+    
 st.set_page_config(page_title="Visualize Test Results", page_icon="🖼️")
 st.title("🖼️ Visualize Test Results")
 
@@ -15,17 +17,20 @@ st.subheader("Select P-Value Source")
 pval_uncorrected = st.session_state.get("test_result", {}).get("pval")
 corrected_p = st.session_state.get("corrected_p")
 
+
+# Prevent running if no data loaded
+if pval_uncorrected is None and corrected_p is None:
+    st.error("❌ No p-values was found in memory.")
+    st.info("Please go to **statistical analysis** and run a test before using this page.")
+    st.stop()
+
 if corrected_p is not None:
-    pval_corrected = corrected_p[0]
+    if isinstance(corrected_p,tuple):
+        pval_corrected = corrected_p[0]
 else:
     st.warning("No corrected p-values found in session state.")
     pval_corrected = None
-
-# If no p-values at all, show an error and stop execution
-if pval_uncorrected is None and pval_corrected is None:
-    st.error("❌ No p-values available. Please run a statistical test first from the Statistical Tests page.")
-    st.stop()
-
+    
 n_timepoints = st.session_state.get("test_result", {}).get("test_summary", {}).get("Timepoints", None)
 
 # Get unique predictors and outcomes
@@ -220,9 +225,9 @@ def plot_pval(label, pval_data, n_timepoints):
     elif shape_type in ["2D_matrix"]:
             col1, col2 = st.columns(2)
             with col1:
-                xlabel = st.text_input(f"X-axis label", value="", key = f'xlabel_{selected_plot}')
+                xlabel = st.text_input(f"X-axis label", value="", key = f'xlabel_{selected_plot}_{label}')
             with col2:
-                ylabel = st.text_input(f"Y-axis label", value="", key = f'ylabel_{selected_plot}')
+                ylabel = st.text_input(f"Y-axis label", value="", key = f'ylabel_{selected_plot}_{label}')
 
 
             col_width, col_height = st.columns(2)
@@ -241,12 +246,13 @@ def plot_pval(label, pval_data, n_timepoints):
             xticklabels_input = st.text_area(
                 "X-axis labels", 
                 ", ".join(outcomes),
-                                        help=(
-        "Enter a comma-separated list (e.g., 'Alpha, Beta, Gamma'), or a single word (e.g., 'Condition') "
-        "to auto-number labels (e.g., 'Condition 1', 'Condition 2', ...). "
-        "Leave empty to use default labels.\n\n"
-        "**Press Enter or click outside the box to apply changes.**"
-    )
+                help=(
+                "Enter a comma-separated list (e.g., 'Alpha, Beta, Gamma'), or a single word (e.g., 'Condition') "
+                "to auto-number labels (e.g., 'Condition 1', 'Condition 2', ...). "
+                "Leave empty to use default labels.\n\n"
+                "**Press Enter or click outside the box to apply changes.**"
+            ), 
+            key = f'X_label_{label}'
             )
             
 
@@ -264,11 +270,12 @@ def plot_pval(label, pval_data, n_timepoints):
                 "Y-axis labels", 
                 ", ".join(predictors),
                         help=(
-        "Enter a comma-separated list (e.g., 'Alpha, Beta, Gamma'), or a single word (e.g., 'Condition') "
-        "to auto-number labels (e.g., 'Condition 1', 'Condition 2', ...). "
-        "Leave empty to use default labels.\n\n"
-        "**Press Enter or click outside the box to apply changes.**"
-    )
+                    "Enter a comma-separated list (e.g., 'Alpha, Beta, Gamma'), or a single word (e.g., 'Condition') "
+                    "to auto-number labels (e.g., 'Condition 1', 'Condition 2', ...). "
+                    "Leave empty to use default labels.\n\n"
+                    "**Press Enter or click outside the box to apply changes.**"
+                ), 
+            key = f'Y_label_{label}'
             )
 
             if "," in yticklabels_input:
@@ -439,4 +446,4 @@ if plot_uncorrected and pval_uncorrected is not None:
 
 if plot_corrected and pval_corrected is not None:
     st.subheader("📊 Corrected P-Values")
-    plot_pval("Corrected", pval_corrected, n_timepoints)
+    plot_pval(f"{st.session_state.correction_label} corrected", pval_corrected, n_timepoints)

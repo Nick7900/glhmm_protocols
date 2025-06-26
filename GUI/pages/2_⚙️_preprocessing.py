@@ -2,11 +2,11 @@ import streamlit as st
 from glhmm import preproc
 import numpy as np
 import json
-from importlib import reload
-reload(preproc)
 from pathlib import Path
 import pickle 
 from utils import detect_state_type
+from importlib import reload
+reload(preproc)
 
 st.set_page_config(page_title="Preprocessing", page_icon="⚙️")
 st.title("⚙️ Preprocessing")
@@ -21,78 +21,47 @@ post_standardise = None
 enable_lags = False
 autoregressive_order = None
 # Check if data is loaded
+# Prevent running if no data loaded
 if st.session_state.get("data_load") is None:
-    st.error("Please load data first from the Data Loading page")
+    st.error("❌ No data was found in memory.")
+    st.info("Please go to the **load date** before using this page.")
     st.stop()
 
-detected_type = detect_state_type(st.session_state.get("data_load"))
+# Detect state type only once and store it
+if "data_type_detected" not in st.session_state:
+    detected_type = detect_state_type(st.session_state["data_load"])
+    st.session_state.data_type_detected = detected_type
+else:
+    detected_type = st.session_state.data_type_detected
+
 if detected_type in ["Gamma", "Viterbi Path"]:
     st.warning(
-        "State time course data like 'Gamma' or 'Viterbi Path' cannot be preprocessed.\n\n"
-        "To preprocess data, load raw or processed signal data instead.\n"
-        "Alternatively, go to the 'Fitting HMM' page and choose "
-        "'Configure loaded data for statistical analysis'."
+        "⚠️ State time course data like **Gamma** or **Viterbi Path** cannot be preprocessed.\n\n"
+        "To preprocess data, please load raw or processed signal data instead.\n\n"
+        "✅ Since you have already decoded state time courses, you can skip the preprocssing step and go directly to the **fitting HMM** page.\n"
+        "There, select:\n\n"
+        "➡️ **Configure loaded data for statistical analysis** (third option above)."
     )
     st.stop()
-
-data_load = st.session_state.data_load
-
-data_behav = st.session_state.data_behav
-indices = st.session_state.indices
 preprocess_both = False
 if st.session_state.get("D_and_R_same", False):
-    preprocess_both = st.checkbox(
+    st.session_state.preprocess_both = st.checkbox(
         "Preprocess both D and R (for GLHMM)", 
-        value=False,
+        value=st.session_state.get("preprocess_both", False),
         help="Tick this if you want to preprocess both brain data and behavioural data (they have the same shape)."
     )
-
+else:
+    st.session_state.preprocess_both = False
+    
 st.session_state.fs = None  # Initialize fs in session state
 st.subheader("Preprocessing Parameters")
 standardise = st.checkbox("Standardise (z-score)", value=True)
-# if preprocess_both:
-#     col1, col2 = st.columns(2)
 
-#     with col1:
-#         fs_Y = st.number_input("Sampling frequency for Y (Hz)", min_value=1.0, value=1000.0, step=1.0, key="fs_Y_input")
-#         st.session_state.fs_Y = fs_Y
-
-#         enable_downsample_Y = st.checkbox("Enable downsampling Y", value=False, key="downsample_checkbox_Y")
-#         downsample_Y = None
-#         if enable_downsample_Y:
-#             downsample_Y = st.number_input(
-#                 "Target frequency for Y (Hz)",
-#                 min_value=1.0,
-#                 max_value=fs_Y,
-#                 value=fs_Y / 2,
-#                 step=1.0,
-#                 key="downsample_input_Y"
-#             )
-#             st.info(f"Downsampling Y from {fs_Y} Hz to {downsample_Y} Hz")
-
-#     with col2:
-#         fs_X = st.number_input("Sampling frequency for X (Hz)", min_value=1.0, value=1000.0, step=1.0, key="fs_X_input")
-#         st.session_state.fs_X = fs_X
-
-#         enable_downsample_X = st.checkbox("Enable downsampling X", value=False, key="downsample_checkbox_X")
-#         downsample_X = None
-#         if enable_downsample_X:
-#             downsample_X = st.number_input(
-#                 "Target frequency for X (Hz)",
-#                 min_value=1.0,
-#                 max_value=fs_X,
-#                 value=fs_X / 2,
-#                 step=1.0,
-#                 key="downsample_input_X"
-#             )
-#             st.info(f"Downsampling X from {fs_X} Hz to {downsample_X} Hz")
-
-# else:
 fs = st.number_input("Sampling frequency (Hz)", min_value=1.0, value=1000.0, step=1.0)
 st.session_state.fs = fs  # Store fs in session state for later use
 
 # Downsampling
-enable_downsample = st.checkbox("Enable downsampling", value=False, key="downsample_checkbox")
+enable_downsample = st.checkbox("Enable downsampling", value=False, key="downsample_checkbox", help="Reduce the sampling rate of your data to decrease computational load. Useful for long recordings or high-frequency data.")
 if enable_downsample:
     downsample = st.number_input(
         "Target frequency (Hz)",
@@ -100,7 +69,8 @@ if enable_downsample:
         max_value=float(fs),
         value=float(fs/2),
         step=1.0,
-        key="downsample_input"
+        key="downsample_input",
+        help="Specify the new sampling frequency. The original data will be resampled to this rate."
     )
     st.info(f"Downsampling from {fs}Hz to {downsample}Hz")
 downsample = downsample if enable_downsample else None
@@ -112,12 +82,14 @@ st.selectbox(
     "Dampen extreme peaks",
     ["None", "True", "Set value"],
     index=0,
-    key="dampen_mode"
+    key="dampen_mode",
+    help="Suppress unusually large amplitude values in the signal. This can reduce artefacts and improve model stability."
 )
 
 # Conditionally show dampening strength input
 if st.session_state.dampen_mode == "Set value":
-    dampen_val = st.number_input("Dampening strength", min_value=1, value=20, key="dampen_strength")
+    dampen_val = st.number_input("Dampening strength", min_value=1, value=20, key="dampen_strength", help="Clamp the signal so that extreme values are reduced. Lower values apply stronger dampening."
+    )
 elif st.session_state.dampen_mode == "True":
     dampen_val = True
 else:
@@ -129,23 +101,24 @@ st.markdown("#### Filter Settings")
 filter_type = st.radio(
     "Filter type",
     options=["None", "Band-pass", "High-pass", "Low-pass"],
-    index=0
+    index=0,
+    help="Apply temporal filtering to isolate specific frequency bands of interest."
 )
 
 freqs = None
 if filter_type == "Band-pass":
     col3, col4 = st.columns(2)
     with col3:
-        low = st.number_input("Low cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=1.0, step=0.5, key="band_low")
+        low = st.number_input("Low cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=1.0, step=0.5, key="band_low", help="Frequencies below this value will be attenuated.")
     with col4:
-        high = st.number_input("High cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=250.0, step=0.5, key="band_high")
+        high = st.number_input("High cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=250.0, step=0.5, key="band_high",  help="Frequencies above this value will be attenuated.")
     if low < high:
         freqs = [low, high]
 elif filter_type == "High-pass":
-    low = st.number_input("High-pass cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=1.0, step=0.5, key="hp_cutoff")
+    low = st.number_input("High-pass cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=1.0, step=0.5, key="hp_cutoff", help="Remove slow drifts and baseline shifts by filtering out low frequencies.")
     freqs = [low, None]
 elif filter_type == "Low-pass":
-    high = st.number_input("Low-pass cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=50.0, step=0.5, key="lp_cutoff")
+    high = st.number_input("Low-pass cutoff (Hz)", min_value=0.0, max_value=fs / 2, value=50.0, step=0.5, key="lp_cutoff", help="Remove high-frequency noise by attenuating frequencies above this cutoff.")
     freqs = [0.0, high]
 
 st.markdown("---")
@@ -155,12 +128,12 @@ st.markdown("#### Transformations")
 
 col5, col6 = st.columns(2)
 with col5:
-    detrend = st.checkbox("Detrend", value=False)
+    detrend = st.checkbox("Detrend", value=False, help="Remove linear trends from the signal to focus on fluctuations around the mean.")
 with col6:
-    onpower = st.checkbox("Extract power (Hilbert)", value=False)
+    onpower = st.checkbox("Extract power (Hilbert)", value=False, help="Compute the instantaneous power of the signal using the Hilbert transform.")
 
-onphase = st.checkbox("Extract phase (Hilbert)", value=False)
-
+onphase = st.checkbox("Extract phase (Hilbert)", value=False, help="Compute the instantaneous phase using the Hilbert transform. Used in phase-based connectivity and state modelling.")
+enable_AR = False
 if preprocess_both == False:
     st.markdown("---")
     st.markdown("#### Embedding Options")
@@ -168,15 +141,23 @@ if preprocess_both == False:
 
     enable_AR = st.checkbox("Enable autoregressive coefficient (for HMM-MAR)", value=False, key="enable_AR")
 
+
+    
     if enable_AR:
+        st.markdown("""
+    The **HMM-MAR** (Hidden Markov Model with Multivariate Autoregressive observations) models the temporal dynamics of your data by estimating AR coefficients within each state.
+    
+    ℹ️ A typical choice is AR order 5–10 for high temporal resolution signals like MEG or EEG (See original [MAR-HMM](https://www.sciencedirect.com/science/article/pii/S1053811915010691?via%3Dihub) paper for more information).
+    """)
+        
         autoregressive_order = st.number_input(
-            "Autoregressive Order",
-            min_value=1,
-            value=5,
-            step=1,
-            key="Autoregressive_input"
-        )
-    autoregressive_order = autoregressive_order if enable_AR else None
+        "Autoregressive Order",
+        min_value=1,
+        value=5,
+        step=1,
+        key="Autoregressive_input"
+    )
+autoregressive_order = autoregressive_order if enable_AR else None
 
 
 # Dimensionality Reduction (only if NOT using lags)
@@ -292,14 +273,12 @@ if st.session_state.save_preproc_values:
         st.checkbox("Save log-file of preprocessed data", value=True, key="save_preproc_log")
 
 
-    st.text_input("Folder name for saving results", value="preprocessed_results", key="hmm_preproc_folder")
+    st.text_input("Folder name for saving results", value="Preprocessed_results", key="hmm_preproc_folder")
     st.markdown(
         "> 💡 **Note:** It's a good idea to save selected values to disk. "
         "If your Streamlit app is idle for too long or the page reloads, all unsaved session data will be lost. "
         "You can later reload saved files for further analysis."
     )
-
-
 
 # --- Submit button only ---
 with st.form("preprocessing_form"):
@@ -310,25 +289,11 @@ with st.form("preprocessing_form"):
 if submitted:
     with st.spinner("Preprocessing data..."):
         try:
-            if preprocess_both:
-                data_preproc, idx_preproc, log = preproc.preprocess_data(
-                    data=data_load,
-                    indices=indices,
-                    fs=fs,
-                    dampen_extreme_peaks=dampen_val,
-                    standardise=standardise,
-                    filter=freqs,
-                    detrend=detrend,
-                    onpower=onpower,
-                    onphase=onphase,
-                    pca=pca,
-                    exact_pca=exact_pca,
-                    ica=ica,
-                    ica_algorithm=ica_algorithm,
-                    post_standardise=post_standardise,
-                    downsample=downsample,
-                )
+            data_load = st.session_state.data_load
+            data_behav = st.session_state.data_behav
+            indices = st.session_state.indices
 
+            if preprocess_both:
                 data_behav_preproc, idx_behav_preproc, log = preproc.preprocess_data(
                     data=data_behav,
                     indices=indices,
@@ -352,7 +317,7 @@ if submitted:
                 st.session_state.preproc_log = log
                 st.session_state.lags = lags
                 st.session_state.preproc_run = submitted
-                st.session_state.lags = autoregressive_order
+                st.session_state.autoregressive_order = autoregressive_order
                 log_GUI = log.copy()  # make a copy to avoid modifying original log
 
                 log_GUI["pca"] = pca  
@@ -405,7 +370,7 @@ if submitted:
                 st.session_state.preproc_log_GUI = log_GUI
 
                 st.success("✅ Preprocessing completed!")
-                st.write(f"New shape: {data_preproc.shape}")
+
 
                 # --- Determine and display HMM model type ---
                 if preprocess_both:
@@ -418,7 +383,7 @@ if submitted:
                     model_type = "Gaussian HMM"
 
             st.session_state.HMM_model = model_type  # Store for use on other pages
-            st.info(f"✅ The model is prepared for: **{model_type}**")
+
 
             # Save selected values
             if st.session_state.save_preproc_values:
@@ -438,6 +403,8 @@ if submitted:
 
                 st.success(f"✅ Saved selected values to: `{save_dir}`")
 
+            st.info(f"✅ The model is prepared for: **{model_type}**")
+            st.write(f"New shape: {data_preproc.shape}")
 
         except Exception as e:
             st.error("❌ Preprocessing failed")
@@ -457,4 +424,4 @@ if submitted:
         #     file_name="preprocessing_log.json",
         #     mime="application/json"
         # )
-    
+

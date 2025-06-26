@@ -13,16 +13,23 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from utils import load_data, validate_confounds, _save_object_ui
 
+if "data_raw" in st.session_state:
+    st.session_state.pop("data_raw")  # removes it from memory only on this page
+    
 st.set_page_config(page_title="Statistical Tests", page_icon="📊")
 st.title("📊 Statistical Testing")
 
-# Check if data is loaded
+# Prevent running if no data loaded
 if st.session_state.get("data_load") is None:
-    st.warning("Please load **data** first from the Data Loading page")
+    st.error("❌ No data (D-matrix) was found in memory.")
+    st.info("Please go to **load date**  and load the data before using this page.")
     st.stop()
+# Prevent running if no data loaded
 if st.session_state.get("data_behav") is None:
-    st.warning("Please load **behavioral data** first from the Data Loading page")
+    st.error("❌ No behavioral data (R-matrix) was found in memory.")
+    st.info("Please go to **load date** and load the data before using this page.")
     st.stop()
+
 
 # Test selection
 
@@ -66,7 +73,8 @@ elif test_type in ["Across-trials", "Across-sessions"]:
     if not valid_d_keys:
         st.warning(
             "⚠️ Epoch data not found. To run this test, you must first structure your data into **epochs**.\n\n"
-            "Go to **Page 2: Configure loaded data for statistical analysis** and choose `Restructure data into Epochs`."
+            "➡️ Go to **fitting hmm**, choose **Configure loaded data for statistical analysis** and select **Restructure data into Epochs**."
+
         )
         valid_d_keys = [None]  # Force user to select "None" in dropdown
         st.stop()
@@ -442,6 +450,7 @@ if "test_result" in st.session_state:
             st.session_state.corrected_p = corrected_p
             st.session_state.correction_label = label
             st.success(f"✅ Applied correction: {label}")
+
 
         except Exception as e:
             st.error("❌ Correction failed")
