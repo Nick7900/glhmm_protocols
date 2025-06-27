@@ -24,9 +24,16 @@ The notebooks will automatically download the required datasets on first run. Al
    ```
 
 2. Install the GLHMM package:
+   To install the latest development version from the repository:
    ```bash
    pip install git+https://github.com/vidaurre/glhmm
    ```
+
+   Otherwise, to install the latest stable release from PyPI:
+   ```bash
+   pip install glhmm
+   ```
+
 
 3. Navigate to the Protocols folder and launch the notebook corresponding to the statistical test you want to run:
 
