@@ -56,7 +56,7 @@ In addition to the Python package and Jupyter notebooks, the GLHMM toolbox now i
    ```
 4. Install GLHMM and Streamlit:
    ```bash
-   pip install git+https://github.com/vidaurre/glhmm
+   pip install glhmm
    pip install streamlit
    ```
 
