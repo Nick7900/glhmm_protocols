@@ -37,8 +37,10 @@ This tool is inspired by the setup in [this paper](https://arxiv.org/abs/2505.02
 1. **Loading neuroimaging and behavioural data**
 2. **Preprocessing the time-series data**
 3. **Fitting a Hidden Markov Model**
-4. **Running statistical tests**
-5. **Visualising results**
+4. **Inspect the Hidden Markov Model**
+5. **Configure data for statistical analysis**            
+6. **Running statistical tests**
+7. **Visualising results**
 
 Use the sidebar to navigate through each step. Start by loading your data below.
 """)
