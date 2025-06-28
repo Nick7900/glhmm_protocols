@@ -101,7 +101,7 @@ def plot_pval(label, pval_data, n_timepoints):
     fig = None
     x_tick_min = None
     x_tick_max = None
-    num_x_ticks = None
+    num_x_ticks = 5
     st.markdown(f"### {label} P-values")
 
     # Common user inputs
@@ -109,15 +109,15 @@ def plot_pval(label, pval_data, n_timepoints):
 
     if shape_type in ["2D_time", "3D"]:
         if selected_plot == "Over time":
-            xlabel = st.text_input(f"X-axis label", value="Time points", key = f'xlabel_{selected_plot}')
+            xlabel = st.text_input(f"X-axis label", value="Time points", key = f'xlabel_{label}')
 
             col_width, col_height = st.columns(2)
             with col_width:
                 fig_width = st.number_input("Width", min_value=1.0, value=9.0, step=0.5,
-                                            help="Width of the figure in inches")
+                                            help="Width of the figure in inches", key=f"col_width_{selected_plot}_{label}")
             with col_height:
                 fig_height = st.number_input("Height", min_value=1.0, value=3.0, step=0.5,
-                                            help="Height of the figure in inches")
+                                            help="Height of the figure in inches", key=f"col_height_{selected_plot}_{label}")
             figsize = (fig_width, fig_height)
 
             col_tickbox, col_min, col_max, col_x_ticks= st.columns(4)
@@ -127,18 +127,18 @@ def plot_pval(label, pval_data, n_timepoints):
 
             if use_tick_bounds:
                 with col_min:
-                    x_tick_min = st.number_input(f"x_tick_min", value=0, step=1, key=f"xmin_{selected_plot}")
+                    x_tick_min = st.number_input(f"x_tick_min", value=0, step=1, key=f"xmin_{selected_plot}_{label}")
                 with col_max:
-                    x_tick_max = st.number_input(f"x_tick_max", value=1000, step=1, key=f"xmax_{selected_plot}")
+                    x_tick_max = st.number_input(f"x_tick_max", value=1000, step=1, key=f"xmax_{selected_plot}_{label}")
                 with col_x_ticks:
-                    num_x_ticks = st.number_input(f"num_x_ticks", value=5, step=1, key=f"xtick_{selected_plot}")
+                    num_x_ticks = st.number_input(f"num_x_ticks", value=5, step=1, key=f"xtick_{selected_plot}_{label}")
 
         else:
             col1, col2 = st.columns(2)
             with col1:
-                xlabel = st.text_input(f"X-axis label", value="Time points", key = f'xlabel_{selected_plot}')
+                xlabel = st.text_input(f"X-axis label", value="Time points", key = f'xlabel_{selected_plot}_{label}')
             with col2:
-                ylabel = st.text_input(f"Y-axis label", value="", key = f'ylabel_{selected_plot}')
+                ylabel = st.text_input(f"Y-axis label", value="", key = f'ylabel_{selected_plot}_{label}')
 
 
             col_width, col_height = st.columns(2)
@@ -147,7 +147,7 @@ def plot_pval(label, pval_data, n_timepoints):
                                             help="Width of the figure in inches", key = f'fig_width_{label}')
             with col_height:
                 fig_height = st.number_input("Height", min_value=1.0, value=3.0, step=0.5,
-                                            help="Height of the figure in inches", key = f'fig_width_{label}')
+                                            help="Height of the figure in inches", key = f'fig_height_{label}')
             figsize = (fig_width, fig_height)
 
             col_tickbox, col_min, col_max, col_x_ticks = st.columns(4)
@@ -345,7 +345,8 @@ def plot_pval(label, pval_data, n_timepoints):
         filter_type = st.radio(
             "Plot type",
             options=["Line-plot", "Matrix"],
-            index=0
+            index=0,
+            key = f'radio_{selected_plot}_{label}'
         )
 
         if filter_type == "Matrix":

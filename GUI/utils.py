@@ -276,12 +276,19 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
         
                 #st.write("event_markers", st.session_state.get("event_markers", False))       
                 #st.write(st.session_state.get("event_markers"))
+                # st.write(Gamma.shape)
+                # Convert 1D data_behav into a list of per-session arrays
+                #filtered_R_data = [data_behav[start:end] for start, end in np.array(indices)]
+                #st.write(filtered_R_data)
                 if st.session_state.get("event_markers") is not None:
                     if st.button("Configure data", key="configure_data_button"):
                         fs = st.session_state.fs
                         fs_target = st.session_state.fs_target
                         epoch_window_tp = st.session_state.epoch_window_tp
                         event_markers = st.session_state.event_markers 
+
+            
+
 
                         gamma_epoch, idx_epoch, R_epoch = statistics.get_event_epochs(
                             Gamma, 

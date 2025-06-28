@@ -322,11 +322,12 @@ def data_loading_section():
 
                     if data_behav is not None:
                         final_behav = np.concatenate(data_behav, axis=0) if isinstance(data_behav, list) else data_behav
-                        st.session_state.data_behav = final_behav
+                        
 
                         # Check for shape match (optional)
                         D = st.session_state.get("data_load")
                         st.session_state.D_and_R_same = same_shape_except_last(D, final_behav) if D is not None else False
+                        st.session_state.data_behav = final_behav if st.session_state.D_and_R_same == True else data_behav
                         st.session_state.behav_data_loaded = True
                         st.success("✅ Behavioural data loaded successfully.")
                     else:
@@ -525,7 +526,8 @@ def data_summary_section():
         st.subheader("Behavioural Data")
 
         if st.session_state.get("D_and_R_same"):
-            data_final_behav = st.session_state.data_behav
+            data_final_behav = np.concatenate(st.session_state.get("data_behav"), axis=0) if isinstance(st.session_state.get("data_behav"), list) else st.session_state.get("data_behav")
+            
 
             col1, col2 = st.columns(2)
             with col1:

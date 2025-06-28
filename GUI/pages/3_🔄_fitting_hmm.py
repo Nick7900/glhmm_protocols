@@ -171,9 +171,12 @@ if proceed_with_mode:
         st.markdown("#### Select HMM type")
 
         HMM_model_option = [st.session_state.HMM_model]
+        #st.write(HMM_model_option)
         if st.session_state.HMM_model == "Gaussian HMM":
             HMM_model_option += ["HMM-MAR", "TDE-HMM"]
 
+        if st.session_state.get("D_and_R_same", False):
+            HMM_model_option += ["GLHMM"]    
         if len(HMM_model_option) == 1:
             analysis_type = st.selectbox("Selected HMM type", HMM_model_option)
         else:
@@ -307,7 +310,7 @@ if proceed_with_mode:
 
         st.markdown("#### Select variables")
 
-        if st.session_state.get("D_and_R_same", False):
+        if st.session_state.get("D_and_R_same", False) and analysis_type == "GLHMM" :
             col1, col2, col3 = st.columns(3)
             with col1:
                 Y_key = st.selectbox(f"Select Y data", options=valid_load_keys)
@@ -316,10 +319,10 @@ if proceed_with_mode:
                 st.write(f"Auto-detected type: `{detected_type_D}`")
             with col2:
                 valid_behav_keys = [k for k in st.session_state.keys() if k.startswith("data_behav")]
-                valid_behav_keys.insert(0, None)
+                #valid_behav_keys.insert(0, None)
                 X_key = st.selectbox("Select X data (for GLHMM, optional)", options=valid_behav_keys)
                 X = st.session_state[X_key] if X_key is not None else None
-                detected_type_B = detect_state_type(X)
+                detected_type_B = detect_state_type(X) if X is not None else None
                 st.write(f"Auto-detected type: `{detected_type_B}`")
             with col3:
                 valid_indices_keys = [k for k in st.session_state.keys() if k.startswith("indices")]
