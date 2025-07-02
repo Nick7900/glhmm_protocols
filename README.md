@@ -65,8 +65,9 @@ In addition to the Python package and Jupyter notebooks, the GLHMM toolbox now i
    cd glhmm_protocols/GUI
    streamlit run 1_🏠_load_data.py
    ```
-▶️ Video Tutorial
+## ▶️ Video Tutorial
 A full video walkthrough of the GUI is available here:
+
 📺 GLHMM GUI Tutorial – [YouTube]([https://github.com/vidaurre/glhmm](https://www.youtube.com/watch?v=XPcoK5zCPtU&t=1497s))
 
 ## Features of this Protocol
