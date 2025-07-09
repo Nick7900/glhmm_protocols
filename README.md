@@ -78,5 +78,6 @@ A introductory video walkthrough of the GUI is available here:
 
 ## How to Cite
 
-If you use this framework in your research, please cite the accompanying protocol paper:  
-[A comprehensive framework for statistical testing of brain dynamics](https://arxiv.org/abs/2505.02541)
+If you use this framework in your research, please cite the accompanying protocol papers:  
+* [A comprehensive framework for statistical testing of brain dynamics](https://arxiv.org/abs/2505.02541)
+* [The Gaussian-linear hidden Markov model: A Python package Open Access](https://direct.mit.edu/imag/article/doi/10.1162/imag_a_00460/127499)
