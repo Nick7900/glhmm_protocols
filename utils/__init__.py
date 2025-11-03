@@ -2,6 +2,129 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 from zipfile import ZipFile
+from pathlib import Path
+import sys
+import subprocess
+import urllib.request
+
+def _in_colab() -> bool:
+    """
+    Detects whether the code is running on Google Colab.
+
+    Returns:
+    ----------------
+    bool:
+        True if running on Google Colab, otherwise False.
+    """
+    return "google.colab" in sys.modules
+
+
+def _pip_install(*pkgs, quiet=True):
+    """
+    Installs one or more Python packages using pip.
+
+    Parameters:
+    ----------------
+    *pkgs (str):
+        Package names to install.
+    quiet (bool):
+        If True, suppresses installation output.
+    """
+    args = [sys.executable, "-m", "pip", "install"]
+    if quiet:
+        args.append("-q")
+    subprocess.check_call(args + list(pkgs))
+
+
+def _clone_repo_if_needed(REPO_URL = "https://github.com/Nick7900/glhmm_protocols.git",
+                          REPO_DIR = "glhmm_protocols"):
+    """
+    Clones the GLHMM Protocols repository if running in Colab
+    and the repository folder does not already exist.
+    """
+    if not _in_colab():
+        return
+
+    if not Path(REPO_DIR).exists():
+        print("Cloning the repository...")
+        subprocess.check_call(["git", "clone", "-q", REPO_URL])
+
+    import os
+    if Path(REPO_DIR).exists() and Path.cwd().name != REPO_DIR:
+        os.chdir(REPO_DIR)
+
+
+def _ensure_utils_present():
+    """
+    Ensures that the 'utils' module is available.
+    If it is missing, downloads a minimal version from GitHub.
+    """
+    if Path("utils").exists() or Path("utils.py").exists():
+        return
+
+    print("utils not found → downloading from GitHub...")
+    Path("utils").mkdir(exist_ok=True)
+    urllib.request.urlretrieve(
+        f"https://raw.githubusercontent.com/Nick7900/glhmm_protocols/main/utils/__init__.py",
+        "utils/__init__.py",
+    )
+    print("utils ready.")
+
+
+def _fix_pythonpath():
+    """
+    Adds the repository root to the Python path to enable imports
+    from any notebook location.
+    """
+    here = Path.cwd().resolve()
+    repo_root = here.parent if here.name == "Procedures" else here
+
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+
+
+def _install_dependencies():
+    """
+    Installs the required Python dependencies if they are not already available.
+    This includes 'requests', and the 'glhmm' package.
+    """
+    try:
+        import glhmm  # noqa: F401
+    except Exception:
+        _pip_install("git+https://github.com/vidaurre/glhmm")
+    try:
+        import requests  # noqa: F401
+    except Exception:
+        _pip_install("requests")
+
+
+
+def setup_environment():
+    """
+    Sets up the environment so that notebooks can run both locally
+    and on Google Colab.
+
+    The setup performs the following actions:
+    ----------------
+    • Detects if running on Google Colab.
+    • In Colab: clones the repository and installs dependencies.
+    • Locally: ensures the 'utils' module exists.
+    • Adds the repository root to the Python path.
+
+    Returns:
+    ----------------
+    None
+    """
+    if _in_colab():
+        print("Google Colab detected → setting up environment...")
+        _clone_repo_if_needed()
+    else:
+        _ensure_utils_present()
+
+    _install_dependencies()
+    _fix_pythonpath()
+    print("✅ Environment is ready.")
+
 
 __all__ = [
     "download_file_with_progress_bar",
