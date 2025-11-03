@@ -1,4 +1,4 @@
-ffrom pathlib import Path
+from pathlib import Path
 import requests
 from tqdm import tqdm
 from zipfile import ZipFile
