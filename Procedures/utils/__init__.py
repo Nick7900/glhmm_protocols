@@ -65,7 +65,7 @@ def _ensure_utils_present():
     print("utils not found → downloading from GitHub...")
     Path("utils").mkdir(exist_ok=True)
     urllib.request.urlretrieve(
-        f"https://raw.githubusercontent.com/Nick7900/glhmm_protocols/main/utils/__init__.py",
+        f"https://raw.githubusercontent.com/Nick7900/glhmm_protocols/main/Procedures/utils/__init__.py",
         "utils/__init__.py",
     )
     print("utils ready.")
