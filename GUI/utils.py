@@ -292,8 +292,8 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
 
                         gamma_epoch, idx_epoch, R_epoch = statistics.get_event_epochs(
                             Gamma, 
-                            indices, 
                             data_behav, 
+                            indices, 
                             event_markers,
                             fs=fs, 
                             fs_target=fs_target, 
