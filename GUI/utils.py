@@ -10,13 +10,89 @@ from importlib import reload
 reload(statistics)
 import tempfile
 import re
-
+from collections import Counter
 
 @st.cache_resource
 def cached_load_data(path_str):
     """Wrapper around load_data that caches the result based on the file path"""
     return load_data(path_str)
 
+
+def load_data(path, mmap_mode=None):
+    """
+    Low-level data loader. Safe to call inside cached functions.
+    Does NOT use any Streamlit widgets.
+
+    Returns:
+        - numpy array for CSV / NPY / PKL
+        - dict for MAT files:
+            {
+                "__mat__": True,
+                "vars": [...],
+                "content": full_mat_dict,
+            }
+        - dict for errors:
+            {"__error__": "..."}
+        - dict for unsupported:
+            {"__unsupported__": ext}
+    """
+    try:
+        path = Path(path)
+        ext = path.suffix.lower()
+
+        # CSV -------------------------------------------------------------
+        if ext == ".csv":
+            try:
+                return pd.read_csv(path, header=None).to_numpy()
+            except Exception as e:
+                return {"__error__": f"CSV load failed: {str(e)}"}
+
+        # NPY -------------------------------------------------------------
+        elif ext == ".npy":
+            try:
+                return np.load(path, mmap_mode=None)
+            except Exception as e:
+                return {"__error__": f"NPY load failed: {str(e)}"}
+
+        # MAT -------------------------------------------------------------
+        elif ext == ".mat":
+            try:
+                mat = scipy.io.loadmat(path)
+            except Exception as e:
+                return {"__error__": f"MAT load failed: {str(e)}"}
+
+            # Remove __header__, __globals__, etc.
+            keys = [k for k in mat.keys() if not k.startswith("__")]
+
+            # Pick only numeric 2D+ arrays
+            numeric_vars = [
+                k for k in keys
+                if isinstance(mat[k], np.ndarray) and mat[k].ndim >= 2
+            ]
+
+            return {
+                "__mat__": True,
+                "vars": numeric_vars,
+                "content": mat,
+            }
+
+        # PKL -------------------------------------------------------------
+        elif ext == ".pkl":
+            try:
+                with open(path, "rb") as f:
+                    return pickle.load(f)
+            except Exception as e:
+                return {"__error__": f"PKL load failed: {str(e)}"}
+
+        # UNSUPPORTED EXTENSION ------------------------------------------
+        else:
+            return {"__unsupported__": ext}
+
+    except Exception as e:
+        # No Streamlit widgets here → return error info to UI
+        return {"__error__": f"❌ General load failure: {str(e)}"}
+    
+ 
 def create_index_table(indices):
     """Create styled dataframe for session indices"""
     df = pd.DataFrame(indices, columns=['Start', 'End'])
@@ -28,32 +104,7 @@ def create_index_table(indices):
     # )
 
     return df[['Session', 'Start', 'End', 'Duration']]
-
-
-
-def load_data(path, mmap_mode=None):
-    """Load a single file with memory mapping support"""
-    try:
-        path = Path(path)
-        ext = path.suffix.lower()
-        
-        if ext == '.csv':
-            return pd.read_csv(path, header=None).to_numpy()
-        elif ext == '.npy':
-            #return np.load(path, mmap_mode=mmap_mode or 'r')
-            return np.load(path, mmap_mode=None)
-        elif ext == '.mat':
-            return next(iter(scipy.io.loadmat(path).values()))
-        elif ext == '.pkl':
-            with open(path, "rb") as f:
-                return pickle.load(f)
-        else:
-            st.warning(f"Unsupported file type: {ext}")
-            return None
-    except Exception as e:
-        st.error(f"❌ Failed to load {path.name}: {str(e)}")
-        return None
-    
+   
 
 def validate_confounds(confounds_array, D_matrix):
     if confounds_array is None:
@@ -424,15 +475,47 @@ def get_cached_plot_lifetimes(LTmean):
     return graphics.plot_state_lifetimes(LTmean, xlabel="Sessions", width=1, figsize=(10, 5), return_fig=True)
     
 
+# def detect_state_type(data):
+#     if data.ndim == 2 and np.all((data >= 0) & (data <= 1)):
+#         row_sums = np.sum(data, axis=1)
+#         if np.allclose(row_sums, 1, atol=1e-2):
+#             return "Gamma"
+#     # Check if all values are whole numbers
+#     if np.all(np.mod(data, 1) == 0):
+#         return "Viterbi Path"
+#     return "Unknown"
+
 def detect_state_type(data):
+    # Case 0 — None
+    if data is None:
+        return "Invalid"
+
+    # Case 1 — list of file paths (multi-file input)
+    if isinstance(data, list) and all(isinstance(x, (str, Path)) for x in data):
+        return "FileList"
+
+    # Case 2 — list of numeric arrays (rare but safe to detect)
+    if isinstance(data, list) and all(isinstance(x, np.ndarray) for x in data):
+        return "ArrayList"
+
+    # Case 3 — invalid type for state inference
+    if not isinstance(data, np.ndarray):
+        return "Invalid"
+
+    # Case 4 — Numeric array checks
+    # --- Gamma check ---
     if data.ndim == 2 and np.all((data >= 0) & (data <= 1)):
         row_sums = np.sum(data, axis=1)
         if np.allclose(row_sums, 1, atol=1e-2):
             return "Gamma"
-    # Check if all values are whole numbers
+
+    # --- Viterbi Path check ---
+    # integer values only
     if np.all(np.mod(data, 1) == 0):
         return "Viterbi Path"
+
     return "Unknown"
+
 
 
 def _save_figure_ui(fig, default_name="figure", key_prefix="fig"):
@@ -535,3 +618,50 @@ def get_analysis_options(gamma, vpath, event_markers):
     if vpath is not None and vpath.ndim == 2:
         options.append("State Lifetime")
     return options
+
+
+
+
+def normalize_filename(name):
+    """
+    Removes subject numbers so we can compare the template structure.
+    Example:
+    'subj_008_ica_corrected_1_sflip_parc-raw.npy'
+    → 'subj_##_ica_corrected_1_sflip_parc-raw.npy'
+    """
+    return re.sub(r'\d+', '##', name)
+
+
+def warn_if_filename_structure_diff(files):
+    names = [f.name for f in files]
+
+    # Convert to template form (digits replaced by ##)
+    templates = [normalize_filename(n) for n in names]
+
+    # Count the most common template
+    template_counts = Counter(templates)
+    common_template, _ = template_counts.most_common(1)[0]
+
+    # Outliers = files whose normalized pattern differs
+    outliers = [names[i] for i, t in enumerate(templates) if t != common_template]
+
+    if outliers:
+        st.markdown(
+            f"""
+            <div style="background-color:#fff3cd; padding:15px; border-left:5px solid #ffecb5; border-radius:4px;">
+                <strong>⚠️ Some files do not follow the same naming structure as the majority "<span style='color:green; font-weight:bold;'>{common_template}</span>
+                ":</strong>
+                <ul>
+                    {''.join(f"<li><b>{o}</b></li>" for o in outliers)}
+                </ul>
+                <p>Please check whether these files belong to the same dataset.</p>
+                <p>
+                    Remember you can use the next block 
+                    <span style='color:red; font-weight:bold;'>Filename filter</span>
+                    to select the file types of interest.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+   #return outliers
