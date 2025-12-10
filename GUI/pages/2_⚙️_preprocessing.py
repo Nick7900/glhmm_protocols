@@ -28,9 +28,16 @@ if st.session_state.get("data_load") is None:
     st.stop()
 
 # Detect state type only once and store it
-if "data_type_detected" not in st.session_state:
+if "data_type_detected" not in st.session_state or st.session_state.data_type_detected is None:
     detected_type = detect_state_type(st.session_state["data_load"])
+  
     st.session_state.data_type_detected = detected_type
+    if st.session_state.data_type_detected == "Invalid":
+        st.error(
+            "The loaded data cannot be interpreted. "
+            "Please load a numeric matrix or select a valid variable from the MAT file."
+        )
+        st.stop()
 else:
     detected_type = st.session_state.data_type_detected
 
@@ -43,6 +50,11 @@ if detected_type in ["Gamma", "Viterbi Path"]:
         "➡️ **Configure loaded data for statistical analysis** (third option above)."
     )
     st.stop()
+elif isinstance(st.session_state["data_load"], list) and all(isinstance(x, Path) for x in st.session_state["data_load"]):
+    st.info(
+        "Multiple files detected. They will be handled automatically during preprocessing."
+    )
+    
 preprocess_both = False
 if st.session_state.get("D_and_R_same", False):
     st.session_state.preprocess_both = st.checkbox(
@@ -259,8 +271,6 @@ else:
         pca = None
 
 
-
-
 st.checkbox("💾 Save preprocessed values", value=True, key="save_preproc_values")
 if st.session_state.save_preproc_values:
     st.markdown("#### Select which variables to save:")
@@ -287,75 +297,120 @@ with st.form("preprocessing_form"):
 
 # Run preprocessing
 if submitted:
+    # Create a saving folder => needed for list of file paths
+    save_dir = Path(__file__).resolve().parent.parent / st.session_state.hmm_preproc_folder
+    save_dir.mkdir(exist_ok=True)
     with st.spinner("Preprocessing data..."):
         try:
             data_load = st.session_state.data_load
             data_behav = st.session_state.data_behav
             indices = st.session_state.indices
-
+            
             if preprocess_both:
-                data_behav_preproc, idx_behav_preproc, log = preproc.preprocess_data(
-                    data=data_behav,
-                    indices=indices,
-                    fs=fs,
-                    dampen_extreme_peaks=dampen_val,
-                    standardise=standardise,
-                    filter=freqs,
-                    detrend=detrend,
-                    onpower=onpower,
-                    onphase=onphase,
-                    pca=pca,
-                    exact_pca=exact_pca,
-                    ica=ica,
-                    ica_algorithm=ica_algorithm,
-                    post_standardise=post_standardise,
-                    downsample=downsample,
-                )
+                # Case 1: behavior data is a list of file paths
+                if st.session_state.data_type_detected=='FileList':
+                        data_behav_preproc, log = preproc.preprocess_data(
+                        files=data_behav,
+                        fs=fs,
+                        dampen_extreme_peaks=dampen_val,
+                        standardise=standardise,
+                        filter=freqs,
+                        detrend=detrend,
+                        onpower=onpower,
+                        onphase=onphase,
+                        pca=pca,
+                        exact_pca=exact_pca,
+                        ica=ica,
+                        ica_algorithm=ica_algorithm,
+                        post_standardise=post_standardise,
+                        downsample=downsample,
+                        output_dir = save_dir
+                    )
+                # Case 2: behavior data is already a numeric matrix
+                else:
+                   
+                    data_behav_preproc, idx_behav_preproc, log = preproc.preprocess_data(
+                        data=data_behav,
+                        indices=indices,
+                        fs=fs,
+                        dampen_extreme_peaks=dampen_val,
+                        standardise=standardise,
+                        filter=freqs,
+                        detrend=detrend,
+                        onpower=onpower,
+                        onphase=onphase,
+                        pca=pca,
+                        exact_pca=exact_pca,
+                        ica=ica,
+                        ica_algorithm=ica_algorithm,
+                        post_standardise=post_standardise,
+                        downsample=downsample,
+                    )
 
                 st.session_state.data_behav_preproc = data_behav_preproc
-                st.session_state.indices_behav_preproc = idx_behav_preproc
+                
                 st.session_state.preproc_log = log
                 st.session_state.lags = lags
                 st.session_state.preproc_run = submitted
                 st.session_state.autoregressive_order = autoregressive_order
                 log_GUI = log.copy()  # make a copy to avoid modifying original log
-
                 log_GUI["pca"] = pca  
                 log_GUI["ica"] = ica
                 log_GUI["lags"] = lags.tolist() if enable_lags else None
                 log_GUI.pop("pcamodel", None)  # safely remove if it exists
                 st.session_state.preproc_log_GUI = log_GUI
-
                 st.success("✅ Preprocessing completed!")
-                st.write(f"New shape: {data_preproc.shape}")
+                if not detected_type=='FileList':
+                    st.write(f"New shape: {data_behav_preproc.shape}")
+                    # Also save the indices data
+                    st.session_state.indices_behav_preproc = idx_behav_preproc
 
                 model_type = "Gaussian HMM"
 
             else:
-                data_preproc, idx_preproc, log = preproc.preprocess_data(
-                    data=data_load,
-                    indices=indices,
-                    fs=fs,
-                    dampen_extreme_peaks=dampen_val,
-                    standardise=standardise,
-                    filter=freqs,
-                    detrend=detrend,
-                    onpower=onpower,
-                    onphase=onphase,
-                    pca=pca,
-                    exact_pca=exact_pca,
-                    ica=ica,
-                    ica_algorithm=ica_algorithm,
-                    post_standardise=post_standardise,
-                    downsample=downsample,
-                    lags=lags,
-                    autoregressive_order= autoregressive_order
-                )
 
-
-
+                # Case 1: behavior data is a list of file paths
+                if st.session_state.data_type_detected=='FileList':
+                    data_preproc, log = preproc.preprocess_data(
+                        files=data_load,
+                        fs=fs,
+                        dampen_extreme_peaks=dampen_val,
+                        standardise=standardise,
+                        filter=freqs,
+                        detrend=detrend,
+                        onpower=onpower,
+                        onphase=onphase,
+                        pca=pca,
+                        exact_pca=exact_pca,
+                        ica=ica,
+                        ica_algorithm=ica_algorithm,
+                        post_standardise=post_standardise,
+                        downsample=downsample,
+                        lags=lags,
+                        autoregressive_order= autoregressive_order,
+                        output_dir = save_dir
+                    )
+                else:        
+                    data_preproc, idx_preproc, log = preproc.preprocess_data(
+                        data=data_load,
+                        indices=indices,
+                        fs=fs,
+                        dampen_extreme_peaks=dampen_val,
+                        standardise=standardise,
+                        filter=freqs,
+                        detrend=detrend,
+                        onpower=onpower,
+                        onphase=onphase,
+                        pca=pca,
+                        exact_pca=exact_pca,
+                        ica=ica,
+                        ica_algorithm=ica_algorithm,
+                        post_standardise=post_standardise,
+                        downsample=downsample,
+                        lags=lags,
+                        autoregressive_order= autoregressive_order
+                    )
                 st.session_state.data_preproc = data_preproc
-                st.session_state.indices_preproc = idx_preproc
                 st.session_state.preproc_log = log
                 st.session_state.lags = lags
                 st.session_state.preproc_run = submitted
@@ -369,8 +424,10 @@ if submitted:
                 log_GUI.pop("pcamodel", None)  # safely remove if it exists
                 st.session_state.preproc_log_GUI = log_GUI
 
-                st.success("✅ Preprocessing completed!")
-
+                if not detected_type=='FileList':
+                    st.write(f"New shape: {data_preproc.shape}")
+                    # Also save the indices data
+                    st.session_state.indices_preproc = idx_preproc
 
                 # --- Determine and display HMM model type ---
                 if preprocess_both:
@@ -387,14 +444,11 @@ if submitted:
 
             # Save selected values
             if st.session_state.save_preproc_values:
-                save_dir = Path(__file__).resolve().parent.parent / st.session_state.hmm_preproc_folder
-                save_dir.mkdir(exist_ok=True)
-
                 if st.session_state.save_preproc_log:
                     with open(save_dir / "preproc_log.pkl", "wb") as f:
                         pickle.dump(st.session_state.preproc_log, f)
 
-                if st.session_state.save_preproc_indices:
+                if st.session_state.save_preproc_indices and not detected_type=='FileList':
                     np.save(save_dir / "prepoc_idx.npy", idx_preproc)
 
                 if st.session_state.save_preproc_data:
@@ -404,24 +458,24 @@ if submitted:
                 st.success(f"✅ Saved selected values to: `{save_dir}`")
 
             st.info(f"✅ The model is prepared for: **{model_type}**")
-            st.write(f"New shape: {data_preproc.shape}")
-
         except Exception as e:
             st.error("❌ Preprocessing failed")
             st.error(str(e))
 
     # Log download
-    if "preproc_log" in st.session_state:
+    if "preproc_log_GUI" in st.session_state:
         st.markdown("---")
         st.subheader("📋 Preprocessing Log")
+
         with st.expander("View Log"):
             st.json(st.session_state.preproc_log_GUI)
 
-        # log_text = json.dumps(st.session_state.preproc_log_GUI, indent=2)
-        # st.download_button(
-        #     "💾 Download Preprocessing Log",
-        #     data=log_text,
-        #     file_name="preprocessing_log.json",
-        #     mime="application/json"
-        # )
+        # Convert dict to pretty JSON text
+        log_text = json.dumps(st.session_state.preproc_log_GUI, indent=2, default=str)
 
+        st.download_button(
+            "💾 Download Preprocessing Log",
+            data=log_text,
+            file_name="preprocessing_log.json",
+            mime="application/json"
+        )

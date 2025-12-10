@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 from glhmm import glhmm, auxiliary, io, graphics, statistics, utils, preproc
-from utils import create_index_table, analysis_from_gamma, detect_state_type
+from utils import *
 import tempfile
 import io, contextlib
 
@@ -28,14 +28,26 @@ if st.session_state.get("data_load") is None:
     st.info("Please go to the **load date** before using this page.")
     st.stop()
 
-if "indices" not in st.session_state:
+# Handle single-session edge case
+indices = st.session_state.indices
+detected_type = st.session_state.data_type_detected
+proceed_with_mode = True
+
+# Case A — FileList mode (folder of files)
+if detected_type == "FileList":
+    # Here, each file = one session
+    # indices may be None → do NOT warn
+    st.info("📑 Multiple files detected. They will be processed automatically.")
+    proceed_with_mode = True
+
+# Case B — indices missing (unexpected)
+elif indices is None:
     st.error("❌ No indices was found in memory.")
-    st.info("Please define or load session structure on the **load data** page.")
+    st.info("Please load or define session indices on the **Load Data** page.")
     st.stop()
 
-# Handle single-session edge case
-proceed_with_mode = True
-if len(st.session_state.indices) == 1:
+# Case C — Only 1 session in array-based data
+elif len(indices) == 1:
     st.warning("⚠️ Only one subject/session found. This may limit group-level analyses.")
     proceed_with_mode = False
 
@@ -47,27 +59,32 @@ if len(st.session_state.indices) == 1:
 
     if redefine == "Define manually":
         st.markdown("#### Define session/subject structure")
+
         n_subjects = st.number_input("Number of subjects/sessions", min_value=2, step=1)
         n_timepoints = st.number_input("Number of timepoints per subject/session", min_value=1, step=1)
 
         if st.button("Generate indices"):
             total_expected = n_subjects * n_timepoints
-            gamma_length = st.session_state.gamma.shape[0] if st.session_state.get("gamma") is not None else None
+            data_length = st.session_state.data_load.shape[0]
 
-            if gamma_length is not None and total_expected != gamma_length:
-                st.error(f"❌ Expected {total_expected} samples, but Gamma has {gamma_length}.")
+            if total_expected != data_length:
+                st.error(f"❌ Expected {total_expected} samples but found {data_length}.")
             else:
                 idx_subject = statistics.get_indices_timestamp(n_timepoints, n_subjects)
                 st.session_state.indices = idx_subject
                 st.success(f"✅ Created new indices with shape: {idx_subject.shape}")
                 proceed_with_mode = True
 
+    elif redefine == "Load from file (Page 1)":
+        st.info("Please load indices from Page 1.")
+        st.stop()
+
     elif redefine == "Keep current":
         proceed_with_mode = True
 
-    elif redefine == "Load from file (Page 1)":
-        st.info("Use **Page 1: Load Data** to upload session indices.")
-        st.stop()
+# Case D — Normal case (correct multi-session indices)
+else:
+    proceed_with_mode = True
 
 # Show mode selector only when ready
 if proceed_with_mode:
@@ -167,6 +184,25 @@ if proceed_with_mode:
 
     ####### Train a new HMM
     elif mode == "Train a new HMM":
+
+        default_options = {
+            "cyc": 100,
+            "cyc_to_go_under_th": 10,
+            "initcyc": 10,
+            "initrep": 5,
+            "tol": 1e-4,
+            "threshold_active": 20,
+            "deactivate_states": True,
+            "stochastic": False,
+            "updateGamma": True,
+            "updateDyn": True,
+            "updateObs": True,
+            "verbose": True,
+            "serial": False,
+            "gpu_acceleration": 0,
+            "gpuChunks": 1,
+        }
+                    
         st.markdown("---")
         st.markdown("#### Select HMM type")
 
@@ -238,7 +274,7 @@ if proceed_with_mode:
             pca = None
 
 
-
+        st.markdown("---")
         st.markdown("### HMM Configuration")
         st.number_input("Number of states (K)", min_value=2, value=5, key="cfg_K",  
                         help="Number of hidden states in the HMM. Each state models a distinct pattern in the data.")
@@ -276,6 +312,7 @@ if proceed_with_mode:
         with col_save:
             st.checkbox("💾 Save outputs after training", value=True, key="save_values")
         if st.session_state.save_values:
+            st.markdown("---")
             st.markdown("#### Select which variables to save:")
             if st.session_state.cfg_decode:
                 col_HMM, col_Gamma, col_XI, col_FE, col_vpath= st.columns(5)
@@ -306,10 +343,147 @@ if proceed_with_mode:
                 "If your Streamlit app is idle for too long or the page reloads, all unsaved session data will be lost. "
                 "You can later reload saved files for further analysis."
             )
+        st.markdown("---")
+        # Advanced options when training the HMM
+        st.markdown("### Advanced Training Options")
+        enable_options = st.checkbox(
+            "Enable advanced HMM training options",
+            value=False,
+            key="option_checkbox",
+            help="Configure training hyperparameters such as number of iterations, tolerance, active state threshold, GPU settings, etc."
+        )
+        
+        if enable_options:
+            prev = st.session_state.get("hmm_options")
+            options = prev.copy() if isinstance(prev, dict) else default_options.copy()
+            # Numeric parameters
+            st.markdown("#### EM Training Settings")
 
+            # --- ROW 1 ---
+            col1, col2 = st.columns(2)
+            with col1:
+                options["cyc"] = st.number_input(
+                    "Max EM iterations (`cyc`)",
+                    min_value=1,
+                    value=100,
+                    help="Maximum number of EM iterations."
+                )
+            with col2:
+                options["initcyc"] = st.number_input(
+                    "Initialisation cycles (`initcyc`)",
+                    min_value=1,
+                    value=10,
+                    help="Short EM cycles used during initialisation."
+                )
 
-        st.markdown("#### Select variables")
+            # --- ROW 2 ---
+            col3, col4 = st.columns(2)
+            with col3:
+                options["initrep"] = st.number_input(
+                    "Number of initialisation repeats (`initrep`)",
+                    min_value=1,
+                    value=5,
+                    help="Number of random initial starts before selecting the best model."
+                )
+            with col4:
+                options["tol"] = st.number_input(
+                    "Convergence tolerance (`tol`)",
+                    value=1e-4,
+                    format="%.6f",
+                    help="Training stops when improvement in free energy falls below this value."
+                )
 
+            # --- ROW 3 ---
+            col5, col6 = st.columns(2)
+            with col5:
+                options["cyc_to_go_under_th"] = st.number_input(
+                    "Cycles before tolerance check (`cyc_to_go_under_th`)",
+                    min_value=1,
+                    value=10,
+                    help="Number of EM cycles before applying convergence tolerance."
+                )
+            with col6:
+                options["threshold_active"] = st.number_input(
+                    "State activation threshold (`threshold_active`)",
+                    min_value=1,
+                    value=20,
+                    help="Minimum number of samples required to keep a state active."
+                )
+            col7, col8 = st.columns(2)
+            with col7:
+                options["deactivate_states"] = st.checkbox(
+                "Automatically deactivate inactive states (`deactivate_states`)",
+                value=True,
+                help="If a state becomes unused (too few assigned samples), it is removed from the model."
+                )
+            with col8:
+                options["updateGamma"] = st.checkbox(
+                    "Update Gamma during training (`updateGamma`)",
+                    value=True,
+                    help="Disabling this freezes the state probabilities during EM updates. Rarely used."
+                )
+            col9, col10 = st.columns(2)
+            with col9:
+                options["updateDyn"] = st.checkbox(
+                "Update transition dynamics (`updateDyn`)",
+                value=True,
+                help="Controls whether the transition matrix is updated each EM iteration."
+                )
+            with col10:
+                options["updateObs"] = st.checkbox(
+                "Update observation parameters (`updateObs`)",
+                value=True,
+                help="Controls whether means, covariances, or MAR/TDE parameters are updated each iteration."
+            )
+            col11, col12 = st.columns(2)
+            with col11:
+                options["stochastic"] = st.checkbox(
+                "Enable stochastic training (`stochastic`)",
+                value=False,
+                help="Uses stochastic EM updates for large datasets with random mini-batches."
+                )
+            with col12:
+                options["verbose"] = st.checkbox(
+                "Verbose output (`verbose`)",
+                value=True,
+                help="Prints progress information during training."
+                )
+            col13,  = st.columns(1)
+            with col13:
+                options["serial"] = st.checkbox(
+                    "Force serial execution (`serial`)",
+                    value=False,
+                    help="Disable multiprocessing. Useful for debugging or limited CPUs."
+                )
+            col14,col15  = st.columns(2)
+            with col14:
+                options["gpu_acceleration"] = st.number_input(
+                    "GPU acceleration level (`gpu_acceleration`)",
+                    min_value=0,
+                    max_value=3,
+                    value=0,
+                    help=(
+                        "0 = No GPU\n"
+                        "1 = Use GPU for Gamma updates\n"
+                        "2 = Full GPU for Gamma + Xi\n"
+                        "3 = Experimental / full acceleration"
+                    )
+                )
+            with col15:
+                options["gpuChunks"] = st.number_input(
+                    "GPU chunks (`gpuChunks`)",
+                    min_value=1,
+                    value=1,
+                    help="Splits data into chunks when using GPU acceleration to avoid memory overflow."
+                )
+            # Save options persistently
+            st.session_state.hmm_options = options
+        else:
+            # When disabled, options should not leak into model.train(...)
+            st.session_state.hmm_options = None
+
+        st.markdown("---")
+        st.markdown("### Select data")
         if st.session_state.get("D_and_R_same", False) and analysis_type == "GLHMM" :
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -337,13 +511,21 @@ if proceed_with_mode:
                     st.stop()
             st.write(f"Number of sessions/subjects: {len(indices)}")
 
-
+        elif st.session_state.data_type_detected == "FileList":
+            col1,  = st.columns(1)
+            X = None
+            with col1:
+                Y_key = st.selectbox(f"Select Y data", options=valid_load_keys)
+                Y = st.session_state[Y_key]
+                detected_type_D = detect_state_type(Y)
+                st.write(f"Auto-detected type: `{detected_type_D}`")
         else:
             col1, col2 = st.columns(2)
             X = None
             with col1:
                 Y_key = st.selectbox(f"Select Y data", options=valid_load_keys)
                 Y = st.session_state[Y_key]
+                #st.text(Y)
                 st.write(f"Y data shape: {Y.shape}")
                 
             with col2:
@@ -400,7 +582,15 @@ if proceed_with_mode:
                 
 
             if st.session_state.get("training_triggered", False) and not st.session_state.get("already_trained_this_run", False):
-            
+                
+                if st.session_state.hmm_options is not None:
+                    train_kwargs = {"options": st.session_state.hmm_options}
+                else:
+                    train_kwargs = {}
+                            
+                # Decide whether data source is FileList or arrays
+                is_file_list = st.session_state.data_type_detected == "FileList"
+
                 with st.spinner("Training HMM..."):
                     st.session_state.already_trained_this_run = True  # Prevent retraining on script rerun
                     try:
@@ -415,10 +605,22 @@ if proceed_with_mode:
                             preproclogY=preproclogY
                         )
 
-                        Gamma, Xi, FE = model.train(X=X, Y=np.asarray(Y, dtype=np.float32), indices=indices)
 
+                        if is_file_list:
+                            # File-based training
+                            Gamma, Xi, FE = model.train(
+                                files=Y,
+                                **train_kwargs
+                            )
+                        else:
+                            # Array-based training
+                            Gamma, Xi, FE = model.train(
+                                X=X,
+                                Y=np.asarray(Y, dtype=np.float32),
+                                indices=indices,
+                                **train_kwargs
+                            )
            
-
                         st.success("✅ Training complete.")
                         st.session_state.hmm_trained = True
                         st.session_state.training_triggered = False

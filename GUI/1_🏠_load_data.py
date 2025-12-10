@@ -4,6 +4,7 @@ import numpy as np
 import os
 import re
 import pickle
+from pathlib import WindowsPath
 import scipy.io
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -14,7 +15,8 @@ from glhmm import glhmm, statistics
 from PIL import Image
 import tkinter as tk
 from tkinter import filedialog
-from utils import load_data, create_index_table, same_shape_and_structure, same_shape_except_last, check_indices_match_data_streamlit,cached_load_data
+from collections import Counter
+from utils import *
 
 def browse_file():
     root = tk.Tk()
@@ -55,7 +57,8 @@ if 'data_behav' not in st.session_state:
     st.session_state.data_behav = None
 if 'event_markers' not in st.session_state:
     st.session_state.event_markers = None
-
+    
+st.session_state.data_type_detected = None
 # Clear data_raw after leaving loading page
 if st.session_state.get("clear_data_raw", False):
     st.session_state.pop("data_raw", None)
@@ -85,6 +88,14 @@ def load_multiple_files_large(folder_path, filter_string=""):
     if filter_string:
         files = [f for f in files if filter_string in f.name]
     files = sorted(files, key=natural_keys)
+    outliers =warn_if_filename_structure_diff(files)
+    st.text(outliers)
+    if outliers:
+        st.warning(
+            "⚠️ Some files do not follow the same naming structure as the majority:\n\n"
+            + "\n".join(f"- **{o}**" for o in outliers)
+            + "\n\nPlease check whether these files belong to the same dataset."
+        )
     
     if not files:
         st.error("❌ No matching files found!")
@@ -103,6 +114,7 @@ def load_multiple_files_large(folder_path, filter_string=""):
     
     for i, f in enumerate(files):
         data = cached_load_data(str(f))
+        #print(data.shape)
         if data is None:
             continue
             
@@ -159,6 +171,30 @@ def load_multiple_files_large(folder_path, filter_string=""):
     progress_bar.empty()
     status_text.empty()
     return memmap_arr, np.array(indices)
+
+def load_multiple_files_paths(folder_path, filter_string=""):
+    """Memory-efficient loading of multiple large files"""
+    files = [f for f in Path(folder_path).iterdir() if f.is_file()]
+    if filter_string:
+        files = [f for f in files if filter_string in f.name]
+    files = sorted(files, key=natural_keys)
+    print(files)
+    
+    if not files:
+        st.error("❌ No matching files found!")
+        return None, None
+    
+    # Initialize progress
+    # progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # # Second pass: load data
+    status_text.text("Loading data...")
+
+    # progress_bar.empty()
+    status_text.empty()
+    return files
+
 
 def create_index_table(indices):
     """Create styled dataframe for session indices"""
@@ -217,56 +253,121 @@ def data_loading_section():
                     help="Supports .fif, .npy, .mat, .csv, .pkl"
                 )
                 if brain_file:
+                    #st.text("LOLOL")
                     temp_path = Path(tempfile.gettempdir()) / brain_file.name
                     with open(temp_path, "wb") as f:
                         f.write(brain_file.getvalue())
                     file_path = temp_path
             
-
-        # Load button
+        if "last_mat_loaded" in st.session_state:
+            st.success(
+                f"✅ Brain data loaded successfully.\n\n"
+                f"📌 Loaded MAT variable `{st.session_state.last_mat_loaded}`."
+            )
+            del st.session_state.last_mat_loaded
+        
+        # LOAD BRAIN DATA
         if st.button("Load Brain Data", key="load_brain"):
+            # Show success message from previous MAT selection
             with st.spinner("Loading brain data..."):
+                # MULTI-FILE MODE
                 if multi_mode:
                     if folder_path:
-                        data_load, indices = load_multiple_files_large(folder_path, filter_string)
+                        data_load = load_multiple_files_paths(folder_path, filter_string)
+                        warn_if_filename_structure_diff(data_load)
+                        st.session_state.data_load = data_load
+                        st.session_state.indices = None
+                        st.session_state.brain_data_loaded = True
+                        st.session_state.brain_file_paths = True
+                        st.success("✅ File paths of brain data are loaded successfully.")
+                        st.session_state.pending_mat = None
+                        #st.text(data_load)
+
                     else:
                         st.warning("Please enter a folder path.")
-                        return
+
+                # SINGLE-FILE MODE
                 else:
-                    if file_path:
-                        data_load = cached_load_data(str(file_path))
-                        indices = (
-                            statistics.get_indices_from_list(data_load)
-                            if isinstance(data_load, list)
-                            else np.array([[0, data_load.shape[0]]])
-                        )
-                    else:
+                    st.session_state.brain_file_paths = False
+
+                    if not file_path:
                         st.warning("Please select or enter a valid file path.")
-                        return
 
-                if data_load is not None:
-                    # Flatten if it's a list
-                    final_data = np.concatenate(data_load, axis=0) if isinstance(data_load, list) else data_load
+                    else:
+                        raw = cached_load_data(str(file_path))
+                        is_mat = isinstance(raw, dict) and raw.get("__mat__", False)
+                        # CASE 1 — Not a MAT file
+                        
+                        #if not (isinstance(raw, dict) and raw.get("__mat__")):
+                        if not is_mat:
 
-                    st.session_state.data_load = final_data
-                    st.session_state.indices = indices
+                            data_load = raw
+                            st.session_state.pending_mat = None
 
-                    # Delete the raw version
-                    st.session_state.pop("data_raw", None)
+                            st.session_state.data_load = data_load
+                            st.session_state.indices = (
+                                statistics.get_indices_from_list(data_load)
+                                if isinstance(data_load, list)
+                                else np.array([[0, data_load.shape[0]]])
+                            )
+                            st.session_state.brain_data_loaded = True
+                            st.success("✅ Brain data loaded successfully.")
 
-                    st.session_state.brain_data_loaded = True
-                    st.success("✅ Brain data loaded successfully.")
-                else:
-                    st.error("❌ Failed to load brain data.")
+                        else:
+                            # CASE 2 — MAT file
+                            mat_info = raw
+                            vars = mat_info["vars"]
 
-        # Show persistent success message if already loaded
-        elif st.session_state.get("brain_data_loaded"):
-            st.success("✅ Brain data already loaded.")
+                            if len(vars) == 0:
+                                st.error("❌ MAT file contains no numeric arrays.")
+
+
+                            if len(vars) == 1:
+                                # Auto-select single variable
+                                var_name = vars[0]
+                                data_load = mat_info["content"][var_name]
+
+                                st.session_state.pending_mat = None
+                                st.session_state.data_load = data_load
+                                st.session_state.indices = np.array([[0, data_load.shape[0]]])
+                                st.session_state.brain_data_loaded = True
+                                st.success(
+                                    f"✅ Brain data loaded successfully.\n\n"
+                                    f"📌 Loaded MAT variable `{var_name}`."
+                                )
+
+                            else:
+                                # CASE 3 — MULTIPLE MAT VARIABLES: ask user
+                                st.session_state.pending_mat = mat_info
+                                st.info("A MAT file with multiple variables was detected. Please select the variable below.")
                 
+        # MAT VARIABLE SELECTION UI 
+        if st.session_state.get("pending_mat"):
+            mat_info = st.session_state.pending_mat
+            vars = mat_info["vars"]
+
+            selected_var = st.selectbox(
+                "Select variable from MAT file:",
+                vars,
+                key="brain_mat_var_select"
+            )
+
+            if st.button("Confirm variable selection", key="confirm_brain_mat_var"):
+                #var_name = selected_var
+                data_load = mat_info["content"][selected_var]
+
+                st.session_state.data_load = data_load
+                st.session_state.indices = np.array([[0, data_load.shape[0]]])
+                st.session_state.brain_data_loaded = True
+                st.session_state.pending_mat = None
+
+                st.session_state.last_mat_loaded = selected_var   # store name for next run
+                st.rerun()   
+                st.success("✅ Brain data loaded successfully.")  
 
     with col2:
         st.subheader("Behavioural Data")
-        st.caption("ℹ️ Used as HMM input (`X`) and R-matrix for statistical testing.")
+        st.caption("ℹ️ Used as HMM input (`X`) or R-matrix for statistical testing.")
 
         multi_mode_behav = st.checkbox(
             "🔀 Load multiple files from folder", 
@@ -339,122 +440,119 @@ def data_loading_section():
 
         elif st.session_state.get("behav_data_loaded"):
             st.success("✅ Behavioural data already loaded.")
+    if not st.session_state.get("brain_file_paths"):
 
-    st.subheader("Index data (Optional)")
-    st.info(
-    "This file defines how your data is grouped into sessions or subjects. It's required for training an HMM and for some statistical tests.\n\n"
-    "Each row should specify a range of trial indices that belong to the same group. For example:\n"
-    "```\n"
-    "[[     0,   5000],\n"
-    " [   5000,   10000],\n"
-    " [   10000,   15000]]\n"
-    "```\n"
-    "This means the first group includes trials 4999, the second group includes 5000–9999, and so on.\n\n"
-    "The final index (e.g., 15000) must match the total number of datapoint in your loaded data."
-    )
-
-    use_idx = st.checkbox("📌 Load indices or generate indices", value=False)
-    if use_idx:
-        
-        redefine = st.radio(
-            "Do you want to redefine the session structure?",
-            ["Load indices", "Manual generate indices"],
-            key="get_indices_choice"
+        st.subheader("Index data (Optional)")
+        st.info(
+        "This file defines how your data is grouped into sessions or subjects. It's required for training an HMM and for some statistical tests.\n\n"
+        "Each row should specify a range of trial indices that belong to the same group. For example:\n"
+        "```\n"
+        "[[     0,   5000],\n"
+        " [   5000,   10000],\n"
+        " [   10000,   15000]]\n"
+        "```\n"
+        "This means the first group includes trials 4999, the second group includes 5000–9999, and so on.\n\n"
+        "The final index (e.g., 15000) must match the total number of datapoint in your loaded data."
         )
 
-        if redefine == "Manual generate indices":
-            # Common data check
-            if st.session_state.get("data_load") is None:
-                st.error("❌ Please load data first from the **Data Loading** page.")
-                st.stop()
-                                            
-            st.markdown("#### Define session/subject structure")
-            st.info(
-            "ℹ️ When generating indices manually, all subjects/sessions must have the **same number of timepoints**. "
-            "If your data has subjects/sessions of unequal length, please generate the indices manually and load them using the 'Load indices' option."
-        )
+        use_idx = st.checkbox("📌 Load indices or generate indices", value=False)
+        if use_idx:
             
-            n_subjects = st.number_input("Number of subjects/sessions", min_value=2, step=1, key="define_n_subjects")
-            n_timepoints = st.number_input("Number of timepoints per subject/session", min_value=1, step=1, key="define_n_timepoints")
+            redefine = st.radio(
+                "Do you want to redefine the session structure?",
+                ["Load indices", "Manual generate indices"],
+                key="get_indices_choice"
+            )
 
-            data_length = st.session_state.data_load.shape[0] if st.session_state.get("data_load") is not None else None
-            if st.button("Generate indices"):
-                total_expected = n_subjects * n_timepoints
-                data_length = st.session_state.data_load.shape[0] if st.session_state.get("data_load") is not None else None
- #
-
+            if redefine == "Manual generate indices":
+                # Common data check
+                if st.session_state.get("data_load") is None:
+                    st.error("❌ Please load data first from the **Data Loading** page.")
+                    st.stop()
+                                                
+                st.markdown("#### Define session/subject structure")
+                st.info(
+                "ℹ️ When generating indices manually, all subjects/sessions must have the **same number of timepoints**. "
+                "If your data has subjects/sessions of unequal length, please generate the indices manually and load them using the 'Load indices' option."
+            )
                 
-                if data_length is not None and total_expected != data_length:
-                    if st.session_state.data_load.ndim==3:
-                        st.error(
-                            "❌ The shape of your data suggests it is structured as a 3D-matrix.\n\n"
-                            "➡️ Please click **'Reorder and concatenate data into 2D'** on the **Data Summary** page before defining session indices manually."
-                        )
-                    else:
-                        st.error(
-                        f"❌ The expected total number of samples is **{total_expected}** ({n_subjects} × {n_timepoints}), "
-                        f"but the actual data length is **{data_length}**.\n\n"
-                        "This mismatch suggests that **your sessions may not all have the same number of timepoints**.\n\n"
-                        "➡️ In this case, use the **'Load indices from file'** option on the **Data Loading** page to define session boundaries manually."
-                        )
-                        
-                else:
-                    idx_subject = statistics.get_indices_timestamp(n_timepoints, n_subjects)
-                    st.session_state.indices = idx_subject
-                    st.success(f"✅ New indices created with shape: {idx_subject.shape}")
+                n_subjects = st.number_input("Number of subjects/sessions", min_value=2, step=1, key="define_n_subjects")
+                n_timepoints = st.number_input("Number of timepoints per subject/session", min_value=1, step=1, key="define_n_timepoints")
 
-        elif "Load indices":
-            file_path_idx = None  # Initialize to ensure defined for the warning check
-            is_large_file_idx = st.toggle("File is larger than 200 MB", key="large_idx")
-            if is_large_file_idx:
-                file_path_idx = st.text_input(
-                    "Path to indices file:",
-                    help="Should entries with shape (n_subjects or n_sessions, 2)",
-                    key="file_path_idx"
-                )
-            else:
-                idx_file = st.file_uploader(
-                    "Upload indices data file",
-                    type=["csv", "npy", "mat", "pkl"],
-                    help="Supports .fif, .npy, .mat, .csv, .pkl",
-                    key="idx_uploader"
-                )
-                if idx_file:
-                    temp_path_idx = Path(tempfile.gettempdir()) / idx_file.name
-                    with open(temp_path_idx, "wb") as f:
-                        f.write(idx_file.getvalue())
-                    file_path_idx = temp_path_idx
+                data_length = st.session_state.data_load.shape[0] if st.session_state.get("data_load") is not None else None
+                if st.button("Generate indices"):
+                    total_expected = n_subjects * n_timepoints
+                    data_length = st.session_state.data_load.shape[0] if st.session_state.get("data_load") is not None else None
+    #
 
-
-            if st.button("Load indices", key="load_idx"):
-                if not file_path_idx:
-                    st.warning("⚠️ Please specify or upload a trial indices file before loading.")
-                else:
-                    with st.spinner("Loading indices..."):
-                        data_idx = load_data(file_path_idx)
-
-                        if isinstance(data_idx, (list, np.ndarray)):
-                            # If it's a list, convert to array
-                            if isinstance(data_idx, list):
-                                data_idx = np.array(data_idx)
-
-                            if data_idx.ndim == 2 and data_idx.shape[1] == 2:
-                                st.session_state.indices = data_idx
-                                st.success("Indices loaded successfully.")
-                                st.write(f"✅ Loaded {data_idx.shape[0]} sessions.")
-                                st.write("📌 Preview of five sessions:")
-                                df = pd.DataFrame(data_idx[:5, :], columns=["Start", "End"])
-                                st.dataframe(df, use_container_width=True, hide_index=True)
-                            else:
-                                st.error("❌ Invalid format. Expecting array of shape (n_sessions, 2).")
-                                st.stop()
-                            check_indices_match_data_streamlit(st.session_state.data_load, st.session_state.indices)
+                    
+                    if data_length is not None and total_expected != data_length:
+                        if st.session_state.data_load.ndim==3:
+                            st.error(
+                                "❌ The shape of your data suggests it is structured as a 3D-matrix.\n\n"
+                                "➡️ Please click **'Reorder and concatenate data into 2D'** on the **Data Summary** page before defining session indices manually."
+                            )
                         else:
-                            st.error("❌ Invalid file format for indices.")
+                            st.error(
+                            f"❌ The expected total number of samples is **{total_expected}** ({n_subjects} × {n_timepoints}), "
+                            f"but the actual data length is **{data_length}**.\n\n"
+                            "This mismatch suggests that **your sessions may not all have the same number of timepoints**.\n\n"
+                            "➡️ In this case, use the **'Load indices from file'** option on the **Data Loading** page to define session boundaries manually."
+                            )
+                            
+                    else:
+                        idx_subject = statistics.get_indices_timestamp(n_timepoints, n_subjects)
+                        st.session_state.indices = idx_subject
+                        st.success(f"✅ New indices created with shape: {idx_subject.shape}")
+
+            elif "Load indices":
+                file_path_idx = None  # Initialize to ensure defined for the warning check
+                is_large_file_idx = st.toggle("File is larger than 200 MB", key="large_idx")
+                if is_large_file_idx:
+                    file_path_idx = st.text_input(
+                        "Path to indices file:",
+                        help="Should entries with shape (n_subjects or n_sessions, 2)",
+                        key="file_path_idx"
+                    )
+                else:
+                    idx_file = st.file_uploader(
+                        "Upload indices data file",
+                        type=["csv", "npy", "mat", "pkl"],
+                        help="Supports .fif, .npy, .mat, .csv, .pkl",
+                        key="idx_uploader"
+                    )
+                    if idx_file:
+                        temp_path_idx = Path(tempfile.gettempdir()) / idx_file.name
+                        with open(temp_path_idx, "wb") as f:
+                            f.write(idx_file.getvalue())
+                        file_path_idx = temp_path_idx
 
 
-            
+                if st.button("Load indices", key="load_idx"):
+                    if not file_path_idx:
+                        st.warning("⚠️ Please specify or upload a trial indices file before loading.")
+                    else:
+                        with st.spinner("Loading indices..."):
+                            data_idx = load_data(file_path_idx)
 
+                            if isinstance(data_idx, (list, np.ndarray)):
+                                # If it's a list, convert to array
+                                if isinstance(data_idx, list):
+                                    data_idx = np.array(data_idx)
+
+                                if data_idx.ndim == 2 and data_idx.shape[1] == 2:
+                                    st.session_state.indices = data_idx
+                                    st.success("Indices loaded successfully.")
+                                    st.write(f"✅ Loaded {data_idx.shape[0]} sessions.")
+                                    st.write("📌 Preview of five sessions:")
+                                    df = pd.DataFrame(data_idx[:5, :], columns=["Start", "End"])
+                                    st.dataframe(df, use_container_width=True, hide_index=True)
+                                else:
+                                    st.error("❌ Invalid format. Expecting array of shape (n_sessions, 2).")
+                                    st.stop()
+                                check_indices_match_data_streamlit(st.session_state.data_load, st.session_state.indices)
+                            else:
+                                st.error("❌ Invalid file format for indices.")
 
 
 def data_summary_section():
@@ -462,69 +560,87 @@ def data_summary_section():
         return
 
     st.header("📊 Data Summary")
-
     if st.session_state.get("data_load") is not None:
-        st.subheader("Brain Data")
-
-        data_load = st.session_state.data_load
-        indices = st.session_state.get("indices")
-
-        if data_load.ndim == 3:
-            st.warning("Your data is 3D. Expected shape is (Timepoints, Sessions, Features).")
-
-            dim_order = st.selectbox(
-                "Select the current axis order of your data:",
-                options=[
-                    "(Timepoints, Sessions, Features)",
-                    "(Sessions, Timepoints, Features)",
-                    "(Features, Sessions, Timepoints)"
-                ],
-                index=0
+        if isinstance(st.session_state.get("data_load")[0], WindowsPath):
+            st.info(
+                "Only file paths have been loaded, not the data itself. "
+                "Because of this, a full summary and session indices are not displayed. "
             )
+            
+            st.write("### Loaded file paths")
+            file_info = []
+            for p in st.session_state.get("data_load"):
+                file_info.append({
+                    "Name": p.name,
+                    "Folder": str(p.parent),
+                })
 
-            if not st.session_state.get("data_reshaped", False):
-                reorder_button = st.button("Reorder and concatenate data into 2D")
-                if reorder_button:
-                    if dim_order == "(Sessions, Timepoints, Features)":
-                        data_load = np.transpose(data_load, (1, 0, 2))
-                    elif dim_order == "(Features, Sessions, Timepoints)":
-                        data_load = np.transpose(data_load, (2, 1, 0))
+            df = pd.DataFrame(file_info)
+            st.dataframe(df)
 
-                    if st.session_state.get("D_and_R_same", False):
-                        st.session_state.data_load = statistics.get_concatenate_subjects(data_load)
-                        st.session_state.data_behav = statistics.get_concatenate_subjects(
-                            st.session_state.data_behav
-                        )
+        else:
+
+            st.subheader("Brain Data")
+
+            data_load = st.session_state.data_load
+            indices = st.session_state.get("indices")
+
+            if data_load.ndim == 3:
+                st.warning("Your data is 3D. Expected shape is (Timepoints, Sessions, Features).")
+
+                dim_order = st.selectbox(
+                    "Select the current axis order of your data:",
+                    options=[
+                        "(Timepoints, Sessions, Features)",
+                        "(Sessions, Timepoints, Features)",
+                        "(Features, Sessions, Timepoints)"
+                    ],
+                    index=0
+                )
+
+                if not st.session_state.get("data_reshaped", False):
+                    reorder_button = st.button("Reorder and concatenate data into 2D")
+                    if reorder_button:
+                        if dim_order == "(Sessions, Timepoints, Features)":
+                            data_load = np.transpose(data_load, (1, 0, 2))
+                        elif dim_order == "(Features, Sessions, Timepoints)":
+                            data_load = np.transpose(data_load, (2, 1, 0))
+
+                        if st.session_state.get("D_and_R_same", False):
+                            st.session_state.data_load = statistics.get_concatenate_subjects(data_load)
+                            st.session_state.data_behav = statistics.get_concatenate_subjects(
+                                st.session_state.data_behav
+                            )
+                        else:
+                            st.session_state.data_load = statistics.get_concatenate_subjects(data_load)
+
+                        st.session_state.data_reshaped = True
+                        st.success(f"Data has been reshaped to 2D: shape {st.session_state.data_load.shape}")
                     else:
-                        st.session_state.data_load = statistics.get_concatenate_subjects(data_load)
-
-                    st.session_state.data_reshaped = True
-                    st.success(f"Data has been reshaped to 2D: shape {st.session_state.data_load.shape}")
+                        st.info("No reordering applied yet. Use the button above.")
                 else:
-                    st.info("No reordering applied yet. Use the button above.")
-            else:
-                st.success("✅ Data has already been reshaped.")
+                    st.success("✅ Data has already been reshaped.")
 
-        data_final = st.session_state.data_load
-        indices = st.session_state.get("indices")
+            data_final = st.session_state.data_load
+            indices = st.session_state.get("indices")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"**Shape:** {data_final.shape}")
-            st.write(f"**Data type:** {data_final.dtype}")
-            st.write(f"**Memory usage:** {data_final.nbytes / 1e9:.2f} GB")
-        with col2:
-            st.write(f"**Sessions loaded:** {len(indices) if indices is not None else '?'}")
-            st.write(f"**Total samples:** {data_final.shape[0]:,}")
-            st.write(f"**Channels:** {data_final.shape[1] if data_final.ndim == 2 else '?'}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Shape:** {data_final.shape}")
+                st.write(f"**Data type:** {data_final.dtype}")
+                st.write(f"**Memory usage:** {data_final.nbytes / 1e9:.2f} GB")
+            with col2:
+                st.write(f"**Sessions loaded:** {len(indices) if indices is not None else '?'}")
+                st.write(f"**Total samples:** {data_final.shape[0]:,}")
+                st.write(f"**Channels:** {data_final.shape[1] if data_final.ndim == 2 else '?'}")
 
-        if data_final.ndim == 2 and indices is not None:
-            with st.expander("Session Indices", expanded=True):
-                st.dataframe(create_index_table(indices), use_container_width=True, hide_index=True)
-            if len(indices) == 1:
-                st.warning("Only one session loaded. You need to load 'indices data' if you got multiple sessions.")
+            if data_final.ndim == 2 and indices is not None:
+                with st.expander("Session Indices", expanded=True):
+                    st.dataframe(create_index_table(indices), use_container_width=True, hide_index=True)
+                if len(indices) == 1:
+                    st.warning("Only one session loaded. You need to load 'indices data' if you got multiple sessions.")
 
-    if st.session_state.get("data_behav") is not None:
+    if st.session_state.get("data_behav") is not None and not isinstance(st.session_state.get("data_load"), WindowsPath):
         st.subheader("Behavioural Data")
 
         if st.session_state.get("D_and_R_same"):
@@ -558,6 +674,9 @@ def data_summary_section():
                     st.dataframe(pd.DataFrame(data_behav).head())
                 else:
                     st.write(data_behav)
+    if isinstance(st.session_state.get("data_load"), WindowsPath):
+        st.text("LSOSOL")
+
 
         
 
