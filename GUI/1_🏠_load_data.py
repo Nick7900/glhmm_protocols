@@ -258,13 +258,6 @@ def data_loading_section():
                     with open(temp_path, "wb") as f:
                         f.write(brain_file.getvalue())
                     file_path = temp_path
-            
-        if "last_mat_loaded" in st.session_state:
-            st.success(
-                f"✅ Brain data loaded successfully.\n\n"
-                f"📌 Loaded MAT variable `{st.session_state.last_mat_loaded}`."
-            )
-            del st.session_state.last_mat_loaded
         
         # LOAD BRAIN DATA
         if st.button("Load Brain Data", key="load_brain"):
@@ -279,8 +272,8 @@ def data_loading_section():
                         st.session_state.indices = None
                         st.session_state.brain_data_loaded = True
                         st.session_state.brain_file_paths = True
-                        st.success("✅ File paths of brain data are loaded successfully.")
-                        st.session_state.pending_mat = None
+                        #st.success("✅ File paths of brain data are loaded successfully.")
+                        st.session_state.pending_mat_brain = None
                         #st.text(data_load)
 
                     else:
@@ -300,9 +293,9 @@ def data_loading_section():
                         
                         #if not (isinstance(raw, dict) and raw.get("__mat__")):
                         if not is_mat:
-
+                            
                             data_load = raw
-                            st.session_state.pending_mat = None
+                            st.session_state.pending_mat_brain = None
 
                             st.session_state.data_load = data_load
                             st.session_state.indices = (
@@ -310,8 +303,12 @@ def data_loading_section():
                                 if isinstance(data_load, list)
                                 else np.array([[0, data_load.shape[0]]])
                             )
+
+                            st.session_state.brain_file_paths = False   
+                            st.session_state.last_mat_loaded_brain = None      
+
                             st.session_state.brain_data_loaded = True
-                            st.success("✅ Brain data loaded successfully.")
+            
 
                         else:
                             # CASE 2 — MAT file
@@ -326,24 +323,25 @@ def data_loading_section():
                                 # Auto-select single variable
                                 var_name = vars[0]
                                 data_load = mat_info["content"][var_name]
-
-                                st.session_state.pending_mat = None
+                                st.session_state.last_mat_loaded_brain = var_name 
+                                st.session_state.pending_mat_brain = None
                                 st.session_state.data_load = data_load
                                 st.session_state.indices = np.array([[0, data_load.shape[0]]])
                                 st.session_state.brain_data_loaded = True
-                                st.success(
-                                    f"✅ Brain data loaded successfully.\n\n"
-                                    f"📌 Loaded MAT variable `{var_name}`."
-                                )
-
+                                # st.success(
+                                #     f"✅ Brain data loaded successfully.\n\n"
+                                #     f"📌 Loaded MAT variable `{var_name}`."
+                                # )
+                      
                             else:
                                 # CASE 3 — MULTIPLE MAT VARIABLES: ask user
-                                st.session_state.pending_mat = mat_info
+                                st.session_state.pending_mat_brain = mat_info
+                                st.session_state.brain_data_loaded = False
                                 st.info("A MAT file with multiple variables was detected. Please select the variable below.")
                 
         # MAT VARIABLE SELECTION UI 
-        if st.session_state.get("pending_mat"):
-            mat_info = st.session_state.pending_mat
+        if st.session_state.get("pending_mat_brain"):
+            mat_info = st.session_state.pending_mat_brain
             vars = mat_info["vars"]
 
             selected_var = st.selectbox(
@@ -359,12 +357,26 @@ def data_loading_section():
                 st.session_state.data_load = data_load
                 st.session_state.indices = np.array([[0, data_load.shape[0]]])
                 st.session_state.brain_data_loaded = True
-                st.session_state.pending_mat = None
-
-                st.session_state.last_mat_loaded = selected_var   # store name for next run
+                st.session_state.pending_mat_brain = None
+                st.session_state.last_mat_loaded_brain = selected_var   # store name for next run
                 st.rerun()   
-                st.success("✅ Brain data loaded successfully.")  
-
+                
+    
+        if st.session_state.get("brain_data_loaded"):        
+            # Multi-file mode: we already showed the success message inside the button handler
+            if st.session_state.get("brain_file_paths"):
+                pass  # do nothing
+            # Single-file non-MAT
+            else:
+                varname = st.session_state.get("last_mat_loaded_brain")
+                if varname is not None and st.session_state.get("last_mat_loaded_brain") is not None:
+                    st.success(
+                        f"✅ Brain data loaded successfully.\n\n"
+                        f"📌 Loaded MAT variable `{varname}`."
+                    )
+                else:
+                    st.success("✅ Brain data loaded successfully.")
+         
     with col2:
         st.subheader("Behavioural Data")
         st.caption("ℹ️ Used as HMM input (`X`) or R-matrix for statistical testing.")
@@ -408,38 +420,129 @@ def data_loading_section():
                     with open(temp_path_r, "wb") as f:
                         f.write(behav_file.getvalue())
                     file_path_r = temp_path_r
+        if "last_mat_loaded_R" in st.session_state:
+            st.success(
+                f"✅ Behavioural data loaded successfully.\n\n"
+                f"📌 Loaded MAT variable `{st.session_state.last_mat_loaded_R}`."
+            )
+            del st.session_state.last_mat_loaded_R
 
         if st.button("Load Behavioural Data", key="load_behav"):
             with st.spinner("Loading behavioural data..."):
-                try:
-                    if multi_mode_behav:
-                        if not folder_path_r:
-                            st.warning("Please enter a folder path.")
-                            st.stop()
-                        data_behav, _ = load_multiple_files_large(folder_path_r, filter_string_r)
-                    else:
-                        if not file_path_r:
-                            st.warning("Please select or enter a valid file path.")
-                            st.stop()
-                        data_behav = load_data(file_path_r)
+              
+                if multi_mode_behav:
+                    if not folder_path_r:
+                        st.warning("Please enter a folder path.")
+                        st.stop()
+                    data_behav, _ = load_multiple_files_large(folder_path_r, filter_string_r)
+                    st.session_state.pending_mat_behav = None
+                    st.session_state.behav_data_loaded = True
+                    st.session_state.behav_file_paths = True
 
-                    if data_behav is not None:
-                        final_behav = np.concatenate(data_behav, axis=0) if isinstance(data_behav, list) else data_behav
+                # SINGLE-FILE MODE
+                else:
+                    st.session_state.file_path_r = False
+
+                    if not file_path_r:
+                        st.warning("Please select or enter a valid file path.")
+                        #st.stop()
+
+                    else:
+                        raw = load_data((file_path_r))
                         
+                        # Check if MAT wrapper
+                        is_mat = isinstance(raw, dict) and raw.get("__mat__", False)
+                        # CASE 1 — Not a MAT file
+                        
+                        #if not (isinstance(raw, dict) and raw.get("__mat__")):
+                        if not is_mat:
+                            # Normal file
+                            data_behav = raw.copy()
+                            st.session_state.data_behav = data_behav
+                            st.session_state.pending_mat_behav = None
+                            st.session_state.behav_data_loaded = True
+                            st.session_state.last_mat_loaded_behav = None  
+                            #st.success("✅ Brain data loaded successfully.")
 
-                        # Check for shape match (optional)
-                        D = st.session_state.get("data_load")
-                        st.session_state.D_and_R_same = same_shape_except_last(D, final_behav) if D is not None else False
-                        st.session_state.data_behav = final_behav if st.session_state.D_and_R_same == True else data_behav
-                        st.session_state.behav_data_loaded = True
-                        st.success("✅ Behavioural data loaded successfully.")
-                    else:
-                        st.error("❌ Failed to load behavioural data.")
-                except Exception as e:
-                    st.error(f"❌ Loading failed: {str(e)}")
+                        else:
+                            # CASE 2 — MAT file
+                            mat_info = raw
+                            vars = mat_info["vars"]
 
-        elif st.session_state.get("behav_data_loaded"):
-            st.success("✅ Behavioural data already loaded.")
+                            if len(vars) == 0:
+                                st.error("❌ MAT file contains no numeric arrays.")
+
+                            if len(vars) == 1:
+                                # Auto-select single variable
+                                var_name_behav = vars[0]
+                                data_behav = mat_info["content"][var_name_behav]
+
+                                st.session_state.pending_mat_behav = None
+                                st.session_state.data_behav = data_behav
+
+                                st.session_state.behav_data_loaded = True
+                                st.session_state.last_mat_loaded_behav = var_name_behav   # store name for next run
+                            else:
+                                # CASE 3 — MULTIPLE MAT VARIABLES: ask user
+                                st.session_state.pending_mat_behav = mat_info
+                                st.session_state.behav_data_loaded = False
+                                #st.session_state.behav_data_loaded = True
+                                st.info("A MAT file with multiple variables was detected. Please select the variable below.")
+
+        # MAT VARIABLE SELECTION UI 
+        if st.session_state.get("pending_mat_behav"):
+            mat_info = st.session_state.pending_mat_behav
+            vars = mat_info["vars"]
+
+            selected_var = st.selectbox(
+                "Select variable from MAT file:",
+                vars,
+                key="behav_mat_var_select"
+            )
+
+            if st.button("Confirm variable selection", key="confirm_behav_mat_var"):
+                data_behav = mat_info["content"][selected_var]
+                final_behav = np.concatenate(data_behav, axis=0) if isinstance(data_behav, list) else data_behav
+                D = st.session_state.get("data_load")
+                st.session_state.D_and_R_same = same_shape_except_last(D, final_behav) if D is not None else False
+
+                st.session_state.data_behav = final_behav if st.session_state.D_and_R_same == True else data_behav
+                st.session_state.behav_data_loaded = True
+                st.session_state.pending_mat_behav = None
+
+                st.session_state.last_mat_loaded_behav = selected_var   # store name for next run
+                st.rerun()   
+
+        if st.session_state.get("behav_data_loaded"):
+            data_behav = st.session_state.data_behav.copy()
+            final_behav = np.concatenate(data_behav, axis=0) if isinstance(data_behav, list) else data_behav
+            #st.text(final_behav)
+    
+            # Check for shape match (optional)
+            D = st.session_state.get("data_load")
+            st.session_state.D_and_R_same = same_shape_except_last(D, final_behav) if D is not None else False
+            st.session_state.data_behav = final_behav if st.session_state.D_and_R_same == True else data_behav
+            st.session_state.behav_data_loaded = True
+
+        if st.session_state.get("behav_data_loaded"):
+                
+            # Multi-file mode: we already showed the success message inside the button handler
+            if st.session_state.get("behav_file_paths"):
+                pass  # do nothing
+            # Single-file non-MAT
+            else:
+                varname_behav = st.session_state.get("last_mat_loaded_behav")
+                if varname_behav is not None and st.session_state.get("last_mat_loaded_behav") is not None:
+                    st.success(
+                        f"✅ Behavioural data loaded successfully.\n\n"
+                        f"📌 Loaded MAT variable `{varname_behav}`."
+                    )
+                else:
+                    st.success("✅ Behavioural data loaded successfully.")
+        
+
+
+
     if not st.session_state.get("brain_file_paths"):
 
         st.subheader("Index data (Optional)")

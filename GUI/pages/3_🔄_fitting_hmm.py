@@ -100,6 +100,19 @@ if proceed_with_mode:
     valid_load_keys = [k for k in st.session_state.keys() if k.startswith("data_") 
                        and not any(k.startswith(prefix) for prefix in ["data_reshape","data_type_detected","data_behav", "data_FO", "data_LT", "data_SR"])]
 
+    # If multiple files were detected, only allow preprocessed data
+    if detected_type == "FileList":
+        valid_load_keys = [k for k in valid_load_keys if k == "data_preproc"]
+
+        if not valid_load_keys:  # data_preproc not available → show error
+            st.error("❌ Preprocessed data required for multiple files.")
+            st.info(
+                "A log file must be created before training an HMM with multiple files. "
+                "Please go to the **Preprocessing** page and run preprocessing. "
+                "If you do not want to modify the data, keep the settings unchanged and simply run the preprocessing step."
+            )
+            st.stop()
+
     ####### Load and decode existing HMM
     if mode == "Load and decode data from existing HMM":
         st.subheader("Load Existing HMM")
@@ -550,7 +563,7 @@ if proceed_with_mode:
                 st.error(
                     "❌ Cannot train a new HMM using decoded outputs like Gamma or Viterbi Path.\n\n"
                     "✅ Since you have already decoded these state time courses, you can skip training and directly use the option:\n\n"
-                    "➡️ **Configure loaded data for statistical analysis** (third option above)."
+                    "➡️ **Configure loaded data** or **statistical analysis** (5. and 6. option) or directly ."
                 
                 )
                 st.stop()
