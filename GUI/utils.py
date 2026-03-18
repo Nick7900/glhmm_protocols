@@ -288,21 +288,115 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
                     else:
                         st.error("❌ Invalid format. Expecting a list of arrays with shape (n_trials, 3).")
                         st.session_state.reconstruct_event = False
+                
 
                 if st.session_state.get("reconstruct_event", False):
                     st.markdown("#### Reconstructing state time courses (Gamma) into epochs based on event markers.")
-                    # Main configuration – compact 3-column layout
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        fs = st.number_input("Sampling frequency", value=1000, help="Original data sampling rate (e.g., 1000 Hz)")
-                    with col2:
-                        fs_target = st.number_input("Target sampling frequency", value=fs_default, help="Downsampled rate (e.g., 250 Hz)")
-                    with col3:
-                        epoch_window_tp = st.number_input("Epoch window (timepoints)", value=fs_default, help="Epoch length in timepoints")
 
+                    # Row 1: sampling settings
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        fs = st.number_input(
+                            "Original event-marker sampling frequency (Hz)",
+                            value=1000,
+                            help="Sampling rate used for the event marker indices before preprocessing."
+                        )
+
+                    with col2:
+                        fs_target = st.number_input(
+                            "Sampling frequency of current data (Hz)",
+                            value=fs_default,
+                            help="This must match the sampling rate of the already preprocessed D_data."
+                        )
+
+                    # Row 2: epoch window
+                    st.markdown("**Epoch window (seconds)**")
+                    col3, col4 = st.columns(2)
+
+                    with col3:
+                        epoch_start = st.number_input(
+                            "Start (s)",
+                            value=0.0,
+                            step=0.1,
+                            format="%.3f",
+                            help="Start relative to stimulus onset. Example: -0.2 = 200 ms before."
+                        )
+
+                    with col4:
+                        epoch_end = st.number_input(
+                            "End (s)",
+                            value=1.0,
+                            step=0.1,
+                            format="%.3f",
+                            help="End relative to stimulus onset. Example: 1.0 = 1 second after."
+                        )
+
+                    epoch_window = (epoch_start, epoch_end)
+
+                    st.caption(
+                        "Examples: (0, 1) or (-0.2, 1)."
+                    )
+                    #st.write(event_markers)
                     st.session_state.fs = fs
                     st.session_state.fs_target = fs_target
-                    st.session_state.epoch_window_tp = epoch_window_tp
+                    st.session_state.epoch_window = epoch_window
+
+                    st.markdown("### Plot settings")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        condition_label_1 = st.text_input(
+                            "Label for condition 1",
+                            value=f"Condition (0)"
+                        )
+                    with col2:
+                        condition_label_2 = st.text_input(
+                            "Label for condition 2",
+                            value=f"Condition (1)"
+                        )
+
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        xlabel = st.text_input(
+                            "Time (ms)",
+                            value="Time (ms)"
+                        )
+                    with col4:
+                        ylabel = st.text_input(
+                            'Average Probability',
+                            value='Average Probability'
+                        )
+                    col5, col6 = st.columns(2)
+
+                    with col5:
+                        num_x_ticks = st.number_input(
+                            "Number of x-ticks",
+                            value=5,
+                            min_value=2
+                        )
+                    
+                    with col6:
+                        use_stimulus_onset = st.checkbox("Show stimulus onset", value=False)
+
+                        if use_stimulus_onset:
+                            stimulus_onset_val = st.number_input(
+                                "Stimulus onset position (seconds)",
+                                value=0.0
+                            )
+
+                            epoch_start, epoch_end = st.session_state.epoch_window
+
+                            if not (epoch_start <= stimulus_onset_val <= epoch_end):
+                                st.warning(
+                                    f"Stimulus onset must be within the epoch window "
+                                    f"[{epoch_start}, {epoch_end}] seconds."
+                                )
+                            stimulus_onset = int(round((stimulus_onset_val - epoch_start) * fs_target))
+                        else:
+                            stimulus_onset = None
+                    condition_labels = (condition_label_1, condition_label_2)
+
                     # # Optional setting – separate full-width input
                     # ms_before_stimulus = st.number_input(
                     #     "Pre-stimulus offset (ms)",
@@ -324,7 +418,7 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
                     if errors:
                         st.error("### The following issues were found:\n" + "\n".join(errors))
                         st.stop()  
-        
+
                 #st.write("event_markers", st.session_state.get("event_markers", False))       
                 #st.write(st.session_state.get("event_markers"))
                 # st.write(Gamma.shape)
@@ -335,11 +429,8 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
                     if st.button("Configure data", key="configure_data_button"):
                         fs = st.session_state.fs
                         fs_target = st.session_state.fs_target
-                        epoch_window_tp = st.session_state.epoch_window_tp
+                        epoch_window = st.session_state.epoch_window
                         event_markers = st.session_state.event_markers 
-
-            
-
 
                         gamma_epoch, idx_epoch, R_epoch = statistics.get_event_epochs(
                             Gamma, 
@@ -348,7 +439,7 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
                             event_markers,
                             fs=fs, 
                             fs_target=fs_target, 
-                            epoch_window_tp=epoch_window_tp,
+                            epoch_window=epoch_window,
                             #ms_before_stimulus=int(ms_before_stimulus)
                         )
                         st.session_state.gamma_epoch = gamma_epoch
@@ -357,10 +448,12 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
 
                         st.success(f"Epochs extracted: {gamma_epoch.shape}")
                         st.session_state.analysis_fig = None  # Clear old figure
-
+                        
                         all_conditions = np.unique(R_epoch)
                         if len(all_conditions) == 2:
-                            st.session_state.analysis_fig = get_cached_plot_condition_difference(gamma_epoch, R_epoch)
+                            x_tick_min = epoch_start*1000
+                            x_tick_max = epoch_end*1000
+                            st.session_state.analysis_fig = get_cached_plot_condition_difference(gamma_epoch, R_epoch, condition_labels, xlabel, ylabel, x_tick_min, x_tick_max, stimulus_onset, num_x_ticks)
                             pass
 
             elif epoch_method == "Use session-wise trial indices":
@@ -436,7 +529,7 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
                         st.session_state.gamma_epoch = Gamma_epoch
                         st.success(f"Gamma reshaped to {Gamma_epoch.shape}")
 
-                        st.session_state.analysis_fig = get_cached_plot_condition_difference(gamma_epoch, R_epoch)
+                        st.session_state.analysis_fig = get_cached_plot_condition_difference2(gamma_epoch, R_epoch)
                         pass
                     
 
@@ -449,19 +542,35 @@ def analysis_from_gamma(Gamma, vpath, indices, analysis_options, data_behav=None
         
 
 @st.cache_resource
-def get_cached_plot_condition_difference(gamma_epoch, R_epoch):
+def get_cached_plot_condition_difference(gamma_epoch, R_epoch, condition_labels, xlabel, ylabel, x_tick_min, x_tick_max, stimulus_onset, num_x_ticks):
     return graphics.plot_condition_difference(
         gamma_epoch, R_epoch,
-        condition_labels=("Condition (0)", "Condition (1)"),
+        condition_labels= condition_labels,
         title="Average Probability and Difference",
-        x_tick_min=0,
-        x_tick_max=gamma_epoch.shape[0],
+        x_tick_min=x_tick_min,
+        x_tick_max=x_tick_max,
         num_x_ticks=5,
-        xlabel="Time (ms)",
+        ylabel = ylabel,
+        xlabel=xlabel,
         figsize=(15, 5),
-        return_fig=True
+        return_fig=True,
+        stimulus_onset= stimulus_onset
     )
 
+@st.cache_resource
+def get_cached_plot_condition_difference2(gamma_epoch, R_epoch):
+    return graphics.plot_condition_difference(
+        gamma_epoch, R_epoch,
+        condition_labels= ('Condition 1', 'Condition 2'),
+        title="Average Probability and Difference",
+        x_tick_min=None,
+        x_tick_max=None,
+        num_x_ticks=5,
+        ylabel = 'Average Probability',
+        xlabel="Time (ms)",
+        figsize=(15, 5),
+        return_fig=True,
+    )
 @st.cache_resource
 def get_cached_plot_fo(D_fo):
     return graphics.plot_FO(D_fo, xlabel="Sessions", width=1, figsize=(10, 5), return_fig=True)
@@ -474,16 +583,6 @@ def get_cached_plot_switching_rate(D_SR):
 def get_cached_plot_lifetimes(LTmean):
     return graphics.plot_state_lifetimes(LTmean, xlabel="Sessions", width=1, figsize=(10, 5), return_fig=True)
     
-
-# def detect_state_type(data):
-#     if data.ndim == 2 and np.all((data >= 0) & (data <= 1)):
-#         row_sums = np.sum(data, axis=1)
-#         if np.allclose(row_sums, 1, atol=1e-2):
-#             return "Gamma"
-#     # Check if all values are whole numbers
-#     if np.all(np.mod(data, 1) == 0):
-#         return "Viterbi Path"
-#     return "Unknown"
 
 def detect_state_type(data):
     # Case 0 — None
